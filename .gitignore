@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# 运行产物（可随时用 --mock 重新生成）
+output/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 密钥与本地配置（切勿提交真实 key）
+.env
+*.local.yaml

@@ -1,0 +1,144 @@
+# ============================================================
+# 论文自动批改 配置文件
+# ============================================================
+
+# ---------- 大模型设置（OpenAI 兼容接口均可） ----------
+# api_key 优先从环境变量 PAPER_GRADER_API_KEY 读取，也可直接写在这里
+llm:
+  # 智谱 GLM（默认）:
+  base_url: https://open.bigmodel.cn/api/paas/v4
+  model: glm-4.6
+  # DeepSeek 示例:
+  #   base_url: https://api.deepseek.com/v1
+  #   model: deepseek-chat
+  # OpenAI 示例:
+  #   base_url: https://api.openai.com/v1
+  #   model: gpt-4o
+  # 本地 Ollama 示例:
+  #   base_url: http://localhost:11434/v1
+  #   model: qwen2.5:32b
+  api_key: ""
+  temperature: 0.2
+  max_tokens: 4096
+  timeout: 300      # 单次请求超时（秒），长论文分维度评分耗时较长
+  max_retries: 3
+
+# ---------- 批改设置 ----------
+grading:
+  chunk_chars: 9000        # 长文分块大小（字符）
+  max_fulltext_chars: 24000  # 全文不超过此长度则一次性评完，否则分块两阶段
+  concurrent: 2            # 批量批改并发篇数（1 = 逐篇顺序处理）
+
+  # 总分 → 等级
+  grade_bands:
+    - {min: 90, label: 优秀}
+    - {min: 80, label: 良好}
+    - {min: 70, label: 中等}
+    - {min: 60, label: 及格}
+    - {min: 0,  label: 不及格}
+
+# ---------- 按文件名自动识别论文类型的关键词 ----------
+type_keywords:
+  thesis: [毕业论文, 学位论文, 毕业设计, 开题]
+  journal: [期刊论文, 期刊投稿, 投稿, manuscript, journal]
+  course: [课程论文, 课程作业, 期末论文, 课程考核, 结课论文]
+
+# ============================================================
+# 评分量规（百分制，各维度权重之和 = 100）
+# 每个维度包含：weight 权重 / criteria 评分要点
+# ============================================================
+rubrics:
+
+  course:
+    name: 研究生课程论文
+    dimensions:
+      - name: 选题与切题
+        weight: 20
+        criteria: >
+          选题是否明确、是否紧扣课程主题与作业要求；问题意识是否清晰，
+          有无跑题、泛泛而谈。
+      - name: 内容与知识掌握
+        weight: 25
+        criteria: >
+          对课程核心概念、理论、方法的理解是否准确；运用是否恰当；
+          内容是否有明显的事实性、概念性错误。
+      - name: 分析与论证
+        weight: 25
+        criteria: >
+          论证是否有逻辑、有证据；分析深度如何；是否体现独立思考，
+          而非教材/网络内容的简单堆砌。
+      - name: 结构与逻辑
+        weight: 15
+        criteria: >
+          篇章结构是否完整（摘要、引言、正文、结论、参考文献）；
+          段落衔接与行文逻辑是否清晰。
+      - name: 写作规范与引用
+        weight: 15
+        criteria: >
+          语言表达是否通顺、学术化；引用是否规范、有无参考文献；
+          是否存在抄袭迹象（如文风突变、大段雷同）。
+
+  journal:
+    name: 期刊论文
+    dimensions:
+      - name: 选题与创新性
+        weight: 25
+        criteria: >
+          选题的前沿性与价值；相对已有研究是否有新问题、新方法、
+          新数据或新结论。
+      - name: 文献综述与理论基础
+        weight: 15
+        criteria: >
+          文献是否充分、有代表性；综述是否梳理出研究脉络与缺口，
+          而非罗列摘要。
+      - name: 研究方法与设计
+        weight: 20
+        criteria: >
+          研究设计是否科学、方法是否恰当；数据来源与处理是否透明、
+          可复现。
+      - name: 结果与论证
+        weight: 20
+        criteria: >
+          结果是否支撑结论；论证是否严谨；局限性讨论是否诚实。
+      - name: 学术写作与规范
+        weight: 10
+        criteria: >
+          摘要是否准确概括贡献；语言、图表、公式是否规范。
+      - name: 学术贡献与价值
+        weight: 10
+        criteria: >
+          对学科知识或实践的实际贡献；投稿目标期刊的匹配度。
+
+  thesis:
+    name: 学位论文（毕业论文）
+    dimensions:
+      - name: 选题意义与难度
+        weight: 15
+        criteria: >
+          选题是否具有理论意义或应用价值；工作量与难度是否符合
+          学位要求。
+      - name: 文献综述与理论基础
+        weight: 15
+        criteria: >
+          是否掌握国内外研究现状；理论基础是否扎实、概念界定
+          是否清晰。
+      - name: 创新性及论文价值
+        weight: 20
+        criteria: >
+          是否有新观点、新方法或新发现；创新点是否真实、成立，
+          有无夸大。
+      - name: 研究方法与科研能力
+        weight: 20
+        criteria: >
+          研究方案设计是否合理；数据/实验/论证过程是否体现独立
+          从事研究的能力。
+      - name: 论文写作与逻辑
+        weight: 15
+        criteria: >
+          章节安排是否合理；行文逻辑是否连贯；图表是否清晰、
+          与正文呼应。
+      - name: 格式规范与工作量
+        weight: 15
+        criteria: >
+          摘要/关键词/目录/参考文献是否齐全规范；引用格式是否统一；
+          篇幅与工作量是否达标；有无学术不端迹象。
