@@ -24,13 +24,13 @@ from .fingerprint import bigrams
 logger = logging.getLogger(__name__)
 
 # 余弦阈值（仅在接入了真实句向量模型时使用）
-COS_RECALL = 0.55    # 召回门槛：候选进入验证
-COS_STRONG = 0.72    # 强阈值：余弦单独够高可判“改写疑似”
+COS_RECALL = 0.55  # 召回门槛：候选进入验证
+COS_STRONG = 0.72  # 强阈值：余弦单独够高可判“改写疑似”
 
 # 兜底排序器（bigram 包含系数）阈值
-CONTAIN_RECALL = 0.35   # 召回门槛
-CONTAIN_STRONG = 0.75   # 词块重叠很高但语序不同 → 改写疑似
-TOP_K = 3               # 每个查询句取前 K 个候选进入精排验证
+CONTAIN_RECALL = 0.35  # 召回门槛
+CONTAIN_STRONG = 0.75  # 词块重叠很高但语序不同 → 改写疑似
+TOP_K = 3  # 每个查询句取前 K 个候选进入精排验证
 
 
 class SemanticModel:

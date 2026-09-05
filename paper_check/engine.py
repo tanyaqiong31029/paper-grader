@@ -16,11 +16,18 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .align import Match, Span, TIER_SUSPECT, edit_similarity, tier_of
+from .align import TIER_SUSPECT, Match, Span, edit_similarity, tier_of
 from .fingerprint import LSHIndex, bigrams, simhash
 from .preprocess import PreparedDoc
-from .semantic import (COS_RECALL, COS_STRONG, CONTAIN_RECALL, CONTAIN_STRONG,
-                       SemanticModel, TOP_K, cosine_matrix, containment)
+from .semantic import (
+    CONTAIN_RECALL,
+    CONTAIN_STRONG,
+    COS_RECALL,
+    COS_STRONG,
+    TOP_K,
+    SemanticModel,
+    cosine_matrix,
+)
 
 # 语义通道的编辑相似度精度闸门：召回的候选，编辑相似度达到此值
 # 才判为命中（防止仅共享常用词的无关句子误报）
@@ -60,7 +67,7 @@ class DedupEngine:
         self.index = LSHIndex()
         self._doc_names: dict[int, str] = {}
         self._sent_texts: dict[tuple[int, int], tuple[str, str]] = {}
-        self._lib_matrix: np.ndarray | None = None   # 库句向量缓存
+        self._lib_matrix: np.ndarray | None = None  # 库句向量缓存
         self._lib_keys: list[tuple[int, int]] = []
         self._load_index()
 
@@ -119,9 +126,17 @@ class DedupEngine:
                 sim = edit_similarity(s.norm, s_norm)
                 tier = tier_of(sim)
                 if tier:
-                    matches.append(Match(
-                        q_idx=s.idx, doc_id=doc_id, doc_name=self._doc_names.get(doc_id, str(doc_id)),
-                        s_idx=s_idx, s_display=s_display, sim=round(sim, 3), tier=tier))
+                    matches.append(
+                        Match(
+                            q_idx=s.idx,
+                            doc_id=doc_id,
+                            doc_name=self._doc_names.get(doc_id, str(doc_id)),
+                            s_idx=s_idx,
+                            s_display=s_display,
+                            sim=round(sim, 3),
+                            tier=tier,
+                        )
+                    )
                     matched_q.add(s.idx)
 
         # 4) 语义兜底：字面未达标的句子做向量召回
@@ -137,7 +152,9 @@ class DedupEngine:
         best_per_q: dict[int, Match] = {}
         for m in matches:
             if m.q_idx not in best_per_q or (m.sim, m.semantic_cos) > (
-                    best_per_q[m.q_idx].sim, best_per_q[m.q_idx].semantic_cos):
+                best_per_q[m.q_idx].sim,
+                best_per_q[m.q_idx].semantic_cos,
+            ):
                 best_per_q[m.q_idx] = m
 
         body_chars = prepared.body_chars
@@ -178,7 +195,9 @@ class DedupEngine:
         )
 
     # ---------- 语义通道 ----------
-    def _semantic_pass(self, prepared: PreparedDoc, already_matched: set[int]) -> tuple[str, list[Match]]:
+    def _semantic_pass(
+        self, prepared: PreparedDoc, already_matched: set[int]
+    ) -> tuple[str, list[Match]]:
         """对字面未命中的查询句做语义召回。
 
         两条路径：
@@ -187,8 +206,9 @@ class DedupEngine:
         两条路径的精度都由编辑相似度闸门（SEMANTIC_ES_GATE）把关：
         字面重叠够高按字面分级；语序重排但词块高度重合判“改写疑似”。
         """
-        pending = [s for s in prepared.sentences
-                   if s.idx not in already_matched and len(s.norm) >= 10]
+        pending = [
+            s for s in prepared.sentences if s.idx not in already_matched and len(s.norm) >= 10
+        ]
         if not pending:
             return (self.semantic.name if self.semantic else "bigram-containment"), []
 
@@ -207,9 +227,15 @@ class DedupEngine:
             for s in pending:
                 bset = set(bigrams(s.norm))
                 scores = sorted(
-                    ((len(bset & lib_sets[k]) / min(len(bset), len(lib_sets[k]))
-                      if bset and lib_sets[k] else 0.0, ki)
-                     for ki, k in enumerate(keys)),
+                    (
+                        (
+                            len(bset & lib_sets[k]) / min(len(bset), len(lib_sets[k]))
+                            if bset and lib_sets[k]
+                            else 0.0,
+                            ki,
+                        )
+                        for ki, k in enumerate(keys)
+                    ),
                     key=lambda x: -x[0],
                 )[:TOP_K]
                 scored.append((s, scores))
@@ -223,25 +249,32 @@ class DedupEngine:
                 s_norm, s_display = self._sent_texts[(doc_id, s_idx)]
                 es = edit_similarity(s.norm, s_norm)
                 if es >= SEMANTIC_ES_GATE:
-                    tier = tier_of(es)          # 字面重叠确实高 → 按字面分级
+                    tier = tier_of(es)  # 字面重叠确实高 → 按字面分级
                 elif es >= TIER_SUSPECT:
                     tier = "suspect"
                 elif score >= (COS_STRONG if self.semantic is not None else CONTAIN_STRONG):
-                    tier = "semantic"           # 词块高度重合但语序重排
+                    tier = "semantic"  # 词块高度重合但语序重排
                 else:
                     continue
-                hits.append(Match(
-                    q_idx=s.idx, doc_id=doc_id, doc_name=self._doc_names.get(doc_id, str(doc_id)),
-                    s_idx=s_idx, s_display=s_display, sim=round(es, 3),
-                    tier=tier, semantic_cos=round(score, 3)))
+                hits.append(
+                    Match(
+                        q_idx=s.idx,
+                        doc_id=doc_id,
+                        doc_name=self._doc_names.get(doc_id, str(doc_id)),
+                        s_idx=s_idx,
+                        s_display=s_display,
+                        sim=round(es, 3),
+                        tier=tier,
+                        semantic_cos=round(score, 3),
+                    )
+                )
         return (self.semantic.name if self.semantic else "bigram-containment"), hits
 
     def _lib_vectors(self):
         """库句向量（有真实模型时缓存）。"""
         if self._lib_matrix is None:
             self._lib_keys = sorted(self._sent_texts.keys())
-            self._lib_matrix = self.semantic.embed(
-                [self._sent_texts[k][0] for k in self._lib_keys])
+            self._lib_matrix = self.semantic.embed([self._sent_texts[k][0] for k in self._lib_keys])
         return self._lib_keys, self._lib_matrix
 
     # ---------- 片段合并与章节统计 ----------
@@ -253,16 +286,18 @@ class DedupEngine:
             by_q.setdefault(m.q_idx, []).append(m)
         idxs = sorted(by_q.keys())
         spans, cur = [], [idxs[0]]
-        for prev, nxt in zip(idxs, idxs[1:]):
+        for prev, nxt in zip(idxs, idxs[1:], strict=False):
             if nxt - prev <= 2:  # 允许隔一个短句仍视为同一片段
                 cur.append(nxt)
             else:
                 spans.append(cur)
                 cur = [nxt]
         spans.append(cur)
-        return [Span(q_start=g[0], q_end=g[-1],
-                     matches=[m for i in g for m in by_q[i]])
-                for g in spans if len(g) >= 1]
+        return [
+            Span(q_start=g[0], q_end=g[-1], matches=[m for i in g for m in by_q[i]])
+            for g in spans
+            if len(g) >= 1
+        ]
 
     def _chapter_stats(self, prepared: PreparedDoc, best_per_q: dict[int, Match]) -> list[dict]:
         if not prepared.chapters:
@@ -276,7 +311,11 @@ class DedupEngine:
                     chars += len(s.norm)
                     if s.idx in best_per_q:
                         hit += len(s.norm)
-            out.append({"title": ch.title,
-                        "ratio": round(hit / chars, 4) if chars else 0.0,
-                        "body_chars": chars})
+            out.append(
+                {
+                    "title": ch.title,
+                    "ratio": round(hit / chars, 4) if chars else 0.0,
+                    "body_chars": chars,
+                }
+            )
         return out

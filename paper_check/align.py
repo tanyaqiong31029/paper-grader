@@ -66,8 +66,8 @@ class Match:
     doc_name: str
     s_idx: int
     s_display: str
-    sim: float          # 编辑相似度
-    tier: str           # copy / near / suspect / semantic
+    sim: float  # 编辑相似度
+    tier: str  # copy / near / suspect / semantic
     semantic_cos: float = 0.0  # 语义通道相似度（如有）
 
 
@@ -76,7 +76,7 @@ class Span:
     """连续命中合并成的片段。"""
 
     q_start: int
-    q_end: int          # 含端
+    q_end: int  # 含端
     matches: list[Match]
 
     @property

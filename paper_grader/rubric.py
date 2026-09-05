@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .config import AppConfig, PAPER_TYPES, PAPER_TYPE_LABELS
+from .config import PAPER_TYPE_LABELS, PAPER_TYPES, AppConfig
 
 
 @dataclass
@@ -20,7 +20,7 @@ class Dimension:
 
 @dataclass
 class Rubric:
-    ptype: str          # journal / course / thesis
+    ptype: str  # journal / course / thesis
     name: str
     dimensions: list[Dimension]
 
@@ -50,9 +50,7 @@ def load_rubric(cfg: AppConfig, ptype: str) -> Rubric:
         dimensions=dims,
     )
     if rubric.total_weight != 100:
-        raise ValueError(
-            f"量规 “{rubric.name}” 各维度权重之和为 {rubric.total_weight}，应为 100"
-        )
+        raise ValueError(f"量规 “{rubric.name}” 各维度权重之和为 {rubric.total_weight}，应为 100")
     return rubric
 
 

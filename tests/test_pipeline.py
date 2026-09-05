@@ -3,13 +3,12 @@
 运行：python3 tests/test_pipeline.py
 """
 
-import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from paper_grader.config import AppConfig, LLMConfig
+from paper_grader.config import AppConfig
 from paper_grader.extract import extract_paper
 from paper_grader.grader import Grader, split_chunks
 from paper_grader.llm import LLMError, parse_json_loose
@@ -47,8 +46,10 @@ def test_json_parsing():
     print("[1] JSON 解析稳健性")
     check("纯 JSON", parse_json_loose('{"score": 88}') == {"score": 88})
     check("```json 围栏", parse_json_loose('```json\n{"a": 1}\n```') == {"a": 1})
-    check("前后有说明文字",
-          parse_json_loose('好的，结果如下：{"score": 77, "confidence": 0.9} 请查收')["score"] == 77)
+    check(
+        "前后有说明文字",
+        parse_json_loose('好的，结果如下：{"score": 77, "confidence": 0.9} 请查收')["score"] == 77,
+    )
     try:
         parse_json_loose("完全不是 JSON")
         check("非 JSON 报错", False)
@@ -62,15 +63,29 @@ def test_short_paper():
     cfg = AppConfig.load()
     paper = extract_paper(Path("samples/研究生课程论文_大语言模型在教育教学中的应用研究.docx"))
     dim_replies = [
-        {"score": 90, "confidence": 0.9, "evidence": ["证据一"], "comment": "切题", "suspicions": ""},
+        {
+            "score": 90,
+            "confidence": 0.9,
+            "evidence": ["证据一"],
+            "comment": "切题",
+            "suspicions": "",
+        },
         {"score": 80, "confidence": 0.8, "evidence": [], "comment": "概念准确", "suspicions": ""},
         {"score": 70, "confidence": 0.7, "evidence": [], "comment": "论证一般", "suspicions": ""},
         {"score": 60, "confidence": 0.6, "evidence": [], "comment": "结构尚可", "suspicions": ""},
-        {"score": 50, "confidence": 0.5, "evidence": [], "comment": "引用不规范", "suspicions": "文献过少"},
+        {
+            "score": 50,
+            "confidence": 0.5,
+            "evidence": [],
+            "comment": "引用不规范",
+            "suspicions": "文献过少",
+        },
     ]
     synth_reply = {
         "overall_comment": "总评文字",
-        "strengths": ["选题实用"], "improvements": ["补充实验"], "flags": [],
+        "strengths": ["选题实用"],
+        "improvements": ["补充实验"],
+        "flags": [],
     }
     client = FakeClient(dim_replies + [synth_reply])
     rubric = load_rubric(cfg, "course")
@@ -97,14 +112,21 @@ def test_long_paper():
         for i in range(60)
     )
     from paper_grader.extract import PaperText
+
     paper = PaperText(path=Path("fake_thesis.docx"), title="测试学位论文", text=long_text)
 
     n_chunks = len(split_chunks(long_text, 800))
-    replies = [{"summary": f"块{i}要点", "strengths": [], "weaknesses": ["数据不足"], "quotes": []}
-               for i in range(1, n_chunks + 1)]
-    replies += [{"score": 75, "confidence": 0.75, "evidence": ["q"], "comment": "c", "suspicions": ""}
-                for _ in range(6)]
-    replies.append({"overall_comment": "ok", "strengths": [], "improvements": [], "flags": ["工作量偏少"]})
+    replies = [
+        {"summary": f"块{i}要点", "strengths": [], "weaknesses": ["数据不足"], "quotes": []}
+        for i in range(1, n_chunks + 1)
+    ]
+    replies += [
+        {"score": 75, "confidence": 0.75, "evidence": ["q"], "comment": "c", "suspicions": ""}
+        for _ in range(6)
+    ]
+    replies.append(
+        {"overall_comment": "ok", "strengths": [], "improvements": [], "flags": ["工作量偏少"]}
+    )
 
     client = FakeClient(replies)
     rubric = load_rubric(cfg, "thesis")
@@ -122,10 +144,13 @@ def test_failure_paths():
     print("[4] 失败处理与需人工复评标记")
     cfg = AppConfig.load()
     from paper_grader.extract import PaperText
+
     paper = PaperText(path=Path("f.docx"), title="t", text="正文。" * 100)
 
-    replies = [{"score": s, "confidence": 0.3, "evidence": [], "comment": "c", "suspicions": ""}
-               for s in (80, 80, 80, 80, 80)]
+    replies = [
+        {"score": s, "confidence": 0.3, "evidence": [], "comment": "c", "suspicions": ""}
+        for s in (80, 80, 80, 80, 80)
+    ]
     replies.append({"overall_comment": "x", "strengths": [], "improvements": [], "flags": []})
     client = FakeClient(replies)
     res = Grader(cfg, client, load_rubric(cfg, "course")).grade(paper)
@@ -142,12 +167,13 @@ def test_failure_paths():
 def test_cli_cache_sig():
     print("[5] 缓存签名校验")
     from paper_grader.cli import _cache_valid
-    from paper_grader.grader import GradeResult
+
     p = Path("config.yaml")
-    res = GradeResult(file="config.yaml", title="t", ptype="course", rubric_name="r",
-                      total=80, band="良好", confidence=0.8, dimensions=[])
-    cached = {"model": "glm-4.6", "mock": False,
-              "source_sig": {"size": p.stat().st_size, "mtime": int(p.stat().st_mtime)}}
+    cached = {
+        "model": "glm-4.6",
+        "mock": False,
+        "source_sig": {"size": p.stat().st_size, "mtime": int(p.stat().st_mtime)},
+    }
     check("签名一致 → 命中缓存", _cache_valid(cached, p, "glm-4.6", False))
     check("模型不同 → 失效", not _cache_valid(cached, p, "deepseek-chat", False))
     check("mock 开关不同 → 失效", not _cache_valid(cached, p, "glm-4.6", True))

@@ -31,10 +31,10 @@ def normalize(text: str) -> str:
 
 @dataclass
 class Sentence:
-    idx: int          # 在全文句子序列中的序号
-    display: str      # 原始文本（报告展示用）
-    norm: str         # 归一化文本（比对用）
-    start: int        # 在全文（含标题）中的起始偏移，用于染色定位
+    idx: int  # 在全文句子序列中的序号
+    display: str  # 原始文本（报告展示用）
+    norm: str  # 归一化文本（比对用）
+    start: int  # 在全文（含标题）中的起始偏移，用于染色定位
     end: int
 
 
@@ -90,8 +90,11 @@ def prepare(text: str, name: str = "") -> PreparedDoc:
     for line in body.splitlines(keepends=True):
         stripped = line.strip()
         if stripped and HEADING_RE.match(stripped):
-            doc.chapters.append(Chapter(title=stripped.lstrip("# ").strip()[:30],
-                                        start=cursor, end=cursor + len(line)))
+            doc.chapters.append(
+                Chapter(
+                    title=stripped.lstrip("# ").strip()[:30], start=cursor, end=cursor + len(line)
+                )
+            )
         cursor += len(line)
 
     # 分句：保留标题行（作为独立句子，展示时标记），正文按句末标点切
@@ -103,8 +106,11 @@ def prepare(text: str, name: str = "") -> PreparedDoc:
             pos += len(raw_line) + 1
             continue
         if HEADING_RE.match(line):
-            doc.sentences.append(Sentence(
-                idx=idx, display=line, norm=normalize(line), start=pos, end=pos + len(line)))
+            doc.sentences.append(
+                Sentence(
+                    idx=idx, display=line, norm=normalize(line), start=pos, end=pos + len(line)
+                )
+            )
             idx += 1
             pos += len(raw_line) + 1
             continue
@@ -116,9 +122,15 @@ def prepare(text: str, name: str = "") -> PreparedDoc:
             local = start_in_line + len(part)
             norm = normalize(part)
             if len(norm) >= 6:  # 过短片段（如单个标点）不参与比对
-                doc.sentences.append(Sentence(
-                    idx=idx, display=part.strip(), norm=norm,
-                    start=pos + start_in_line, end=pos + local))
+                doc.sentences.append(
+                    Sentence(
+                        idx=idx,
+                        display=part.strip(),
+                        norm=norm,
+                        start=pos + start_in_line,
+                        end=pos + local,
+                    )
+                )
                 idx += 1
         pos += len(raw_line) + 1
 

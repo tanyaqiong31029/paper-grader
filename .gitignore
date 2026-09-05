@@ -4,6 +4,11 @@ __pycache__/
 *.pyo
 .venv/
 venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+*.db
 
 # 运行产物（可随时用 --mock 重新生成）
 output/

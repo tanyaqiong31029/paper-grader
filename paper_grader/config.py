@@ -32,7 +32,7 @@ class LLMConfig:
     max_retries: int = 3
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "LLMConfig":
+    def from_dict(cls, d: dict[str, Any]) -> LLMConfig:
         env_key = os.environ.get("PAPER_GRADER_API_KEY", "")
         return cls(
             base_url=d.get("base_url", cls.base_url),
@@ -47,19 +47,21 @@ class LLMConfig:
 
 @dataclass
 class GradeConfig:
-    chunk_chars: int = 9000        # 长文分块大小（字符）
+    chunk_chars: int = 9000  # 长文分块大小（字符）
     max_fulltext_chars: int = 24000  # 超过则走“分块 map + 汇总 reduce”两阶段
-    concurrent: int = 2            # 批量批改时的并发篇数
-    grade_bands: list = field(default_factory=lambda: [
-        {"min": 90, "label": "优秀"},
-        {"min": 80, "label": "良好"},
-        {"min": 70, "label": "中等"},
-        {"min": 60, "label": "及格"},
-        {"min": 0, "label": "不及格"},
-    ])
+    concurrent: int = 2  # 批量批改时的并发篇数
+    grade_bands: list = field(
+        default_factory=lambda: [
+            {"min": 90, "label": "优秀"},
+            {"min": 80, "label": "良好"},
+            {"min": 70, "label": "中等"},
+            {"min": 60, "label": "及格"},
+            {"min": 0, "label": "不及格"},
+        ]
+    )
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "GradeConfig":
+    def from_dict(cls, d: dict[str, Any]) -> GradeConfig:
         c = cls()
         if not d:
             return c
@@ -82,13 +84,15 @@ class AppConfig:
     llm: LLMConfig = field(default_factory=LLMConfig)
     grading: GradeConfig = field(default_factory=GradeConfig)
     rubrics: dict = field(default_factory=dict)
-    type_keywords: dict = field(default_factory=lambda: {
-        "thesis": ["毕业论文", "学位论文", "毕业设计", "开题"],
-        "course": ["课程论文", "课程作业", "期末论文", "课程考核", "结课论文"],
-    })
+    type_keywords: dict = field(
+        default_factory=lambda: {
+            "thesis": ["毕业论文", "学位论文", "毕业设计", "开题"],
+            "course": ["课程论文", "课程作业", "期末论文", "课程考核", "结课论文"],
+        }
+    )
 
     @classmethod
-    def load(cls, path: str | Path | None = None) -> "AppConfig":
+    def load(cls, path: str | Path | None = None) -> AppConfig:
         p = Path(path) if path else DEFAULT_CONFIG_PATH
         data: dict[str, Any] = {}
         if p.exists():

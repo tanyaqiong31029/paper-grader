@@ -18,7 +18,6 @@ import hashlib
 import json
 import re
 from dataclasses import asdict, dataclass, field
-from pathlib import Path
 
 from .config import AppConfig
 from .extract import PaperText
@@ -69,12 +68,15 @@ class GradeResult:
 
 # ---------- 论文结构信息抽取（正则，供提示词与 mock 模式使用） ----------
 
+
 def paper_meta(paper: PaperText) -> dict:
     text = paper.text
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
 
     abstract = ""
-    m = re.search(r"(摘\s*要[:：]?)\s*(.{50,800}?)(关键词|Abstract|【|一、|1\s|引言|\n\n)", text, re.S)
+    m = re.search(
+        r"(摘\s*要[:：]?)\s*(.{50,800}?)(关键词|Abstract|【|一、|1\s|引言|\n\n)", text, re.S
+    )
     if m:
         abstract = m.group(2).strip()
 
@@ -86,7 +88,10 @@ def paper_meta(paper: PaperText) -> dict:
     headings = [
         ln.lstrip("#").strip()
         for ln in lines
-        if re.match(r"^(#{1,3}\s|第[一二三四五六七八九十]+[章节部分]|[(（]?(?:[一二三四五六七八九十]|\d{1,2})[)）]、?\s*\S)", ln)
+        if re.match(
+            r"^(#{1,3}\s|第[一二三四五六七八九十]+[章节部分]|[(（]?(?:[一二三四五六七八九十]|\d{1,2})[)）]、?\s*\S)",
+            ln,
+        )
         and 2 < len(ln.lstrip("#").strip()) <= 40
     ]
     return {
@@ -125,6 +130,7 @@ def _sample_excerpt(text: str, limit: int = 3600) -> str:
 
 
 # ---------- 评分流程 ----------
+
 
 class Grader:
     def __init__(self, cfg: AppConfig, client: LLMClient, rubric: Rubric, mock: bool = False):
@@ -196,7 +202,9 @@ class Grader:
         return "\n".join(notes)
 
     # ---- 单维度评分（System 2）----
-    def _score_dimension(self, dim, paper: PaperText, meta: dict, chunk_notes: str) -> DimensionResult:
+    def _score_dimension(
+        self, dim, paper: PaperText, meta: dict, chunk_notes: str
+    ) -> DimensionResult:
         content = (
             f"【结构提纲】{'、'.join(meta['headings']) or '未识别到章节标题'}"
             f"\n【摘要】{meta['abstract'] or '未识别到摘要'}"

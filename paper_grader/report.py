@@ -30,16 +30,20 @@ def report_markdown(res: GradeResult, model_note: str = "") -> str:
         f"- **文件**：{res.file}",
         f"- **论文类型**：{res.rubric_name}",
         f"- **总分**：**{res.total}**（{res.band}）　权重制：{len(res.dimensions)} 个维度加权",
-        f"- **评分置信度**：{res.confidence:.2f}" + ("　⚠️ 建议人工复核" if res.confidence < 0.6 else ""),
+        f"- **评分置信度**：{res.confidence:.2f}"
+        + ("　⚠️ 建议人工复核" if res.confidence < 0.6 else ""),
         f"- **批改方式**：{model_note or ('mock 试运行' if res.mock else 'AI 辅助评分')}",
         f"- **篇幅**：约 {res.n_chars} 字" if res.n_chars else "",
         f"- **标记**：{'；'.join(res.flags) if res.flags else '无'}",
         "",
     ]
 
-    lines += ["## 分维度评分", "",
-              "| 维度 | 权重 | 得分 | 加权得分 | 置信度 |",
-              "|---|---|---|---|---|"]
+    lines += [
+        "## 分维度评分",
+        "",
+        "| 维度 | 权重 | 得分 | 加权得分 | 置信度 |",
+        "|---|---|---|---|---|",
+    ]
     for d in res.dimensions:
         lines.append(
             f"| {d.name} | {d.weight} | {d.score:.0f} | {d.score * d.weight / 100:.1f} | {d.confidence:.2f} |"
@@ -97,10 +101,18 @@ def save_summary_xlsx(results: list[GradeResult], out_dir: Path) -> Path:
     ws.append(cols)
     _style_header(ws, 1, len(cols))
     for r in sorted(ok, key=lambda x: -x.total):
-        ws.append([
-            r.file, r.title, r.rubric_name, r.total, r.band, r.confidence,
-            "；".join(r.flags), "mock 试运行" if r.mock else "",
-        ])
+        ws.append(
+            [
+                r.file,
+                r.title,
+                r.rubric_name,
+                r.total,
+                r.band,
+                r.confidence,
+                "；".join(r.flags),
+                "mock 试运行" if r.mock else "",
+            ]
+        )
         row = ws.max_row
         for c in range(1, len(cols) + 1):
             cell = ws.cell(row=row, column=c)
@@ -127,9 +139,12 @@ def save_summary_xlsx(results: list[GradeResult], out_dir: Path) -> Path:
         for r in ok:
             bands[r.band] = bands.get(r.band, 0) + 1
         dist = "，".join(f"{b} {n_}人" for b, n_ in bands.items())
-        ws.cell(row=stats_row, column=1,
-                value=f"统计：共 {n} 篇成功，平均 {avg:.1f} 分，最高 {max(r.total for r in ok)}，"
-                      f"最低 {min(r.total for r in ok)}。等级分布：{dist}")
+        ws.cell(
+            row=stats_row,
+            column=1,
+            value=f"统计：共 {n} 篇成功，平均 {avg:.1f} 分，最高 {max(r.total for r in ok)}，"
+            f"最低 {min(r.total for r in ok)}。等级分布：{dist}",
+        )
         ws.cell(row=stats_row, column=1).font = Font(bold=True)
 
     # ---------- 按论文类型分表（维度明细） ----------
@@ -139,7 +154,8 @@ def save_summary_xlsx(results: list[GradeResult], out_dir: Path) -> Path:
         sheet_name = re.sub(r"[（(].*?[）)]", "", group[0].rubric_name)[:10] + "明细"
         wsr = wb.create_sheet(sheet_name)
         cols = ["文件名", "论文题目", "总分", "等级"] + [
-            x for d in dims for x in (f"{d.name}({d.weight})", f"{d.name}评语")]
+            x for d in dims for x in (f"{d.name}({d.weight})", f"{d.name}评语")
+        ]
         wsr.append(cols)
         _style_header(wsr, 1, len(cols))
         for r in sorted(group, key=lambda x: -x.total):
