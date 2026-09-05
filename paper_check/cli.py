@@ -26,14 +26,14 @@ DEFAULT_REPORTS = Path("output/check/reports")
 
 def build_params_key(use_semantic: bool, store: LibraryStore) -> str:
     import hashlib
-    import json
 
     sig = f"sem={use_semantic}|{store.stats()}"
     return hashlib.sha256(sig.encode()).hexdigest()[:16]
 
 
-def run_check(db: Path, reports_dir: Path, file_path: Path, use_semantic: bool = True,
-              verbose: bool = False) -> dict:
+def run_check(
+    db: Path, reports_dir: Path, file_path: Path, use_semantic: bool = True, verbose: bool = False
+) -> dict:
     store = LibraryStore(db)
     try:
         from .engine import DedupEngine
@@ -47,27 +47,30 @@ def run_check(db: Path, reports_dir: Path, file_path: Path, use_semantic: bool =
             summary = store.get_summary(cached["report_no"]) or {}
             summary["cached"] = True
             summary["html_path"] = cached["html_path"]
-            print(f"[秒传] 该文件在此比对库版本下已检测过，直接复用报告："
-                  f"{cached['report_no']}")
+            print(f"[秒传] 该文件在此比对库版本下已检测过，直接复用报告：{cached['report_no']}")
             return summary
 
         engine = DedupEngine(store)
         text, _warn = extract_any(file_path)
         prepared = prepare(text, name=file_path.name)
         if verbose:
-            print(f"预处理：{len(prepared.sentences)} 句 / 正文 {prepared.body_chars} 字符"
-                  f"{'；'.join(prepared.notes)}")
+            print(
+                f"预处理：{len(prepared.sentences)} 句 / 正文 {prepared.body_chars} 字符"
+                f"{'；'.join(prepared.notes)}"
+            )
 
         def progress(stage, pct, msg):
             if verbose:
                 print(f"  [{stage} {pct:>3}%] {msg}")
 
         result = engine.check(prepared, progress=progress, use_semantic=use_semantic)
-        params = {"use_semantic": use_semantic, "exclude_refs": True,
-                  "index_stats": engine.library_stats()}
+        params = {
+            "use_semantic": use_semantic,
+            "exclude_refs": True,
+            "index_stats": engine.library_stats(),
+        }
         html_path, report_no, summary = save_report(result, reports_dir, params)
-        store.save_report(report_no, qsha, params_key, result.total_ratio,
-                          str(html_path), summary)
+        store.save_report(report_no, qsha, params_key, result.total_ratio, str(html_path), summary)
         summary["cached"] = False
         summary["html_path"] = str(html_path)
         return summary
@@ -80,9 +83,17 @@ def cmd_index(args) -> int:
     try:
         from .engine import DedupEngine
 
-        files = [f for f in sorted(Path(args.path).rglob("*"))
-                 if f.is_file() and f.suffix.lower() in {".txt", ".md", ".pdf", ".docx"}
-                 and not f.name.startswith(("~", "."))] if Path(args.path).is_dir() else [Path(args.path)]
+        files = (
+            [
+                f
+                for f in sorted(Path(args.path).rglob("*"))
+                if f.is_file()
+                and f.suffix.lower() in {".txt", ".md", ".pdf", ".docx"}
+                and not f.name.startswith(("~", "."))
+            ]
+            if Path(args.path).is_dir()
+            else [Path(args.path)]
+        )
         if not files:
             print(f"未找到可入库的文献文件（.txt/.md/.pdf/.docx）：{args.path}")
             return 1
@@ -106,10 +117,17 @@ def cmd_index(args) -> int:
 
 
 def cmd_check(args) -> int:
-    summary = run_check(Path(args.db), Path(args.reports), Path(args.file),
-                        use_semantic=not args.no_semantic, verbose=True)
-    print(f"\n总相似比：{summary['total_ratio'] * 100:.1f}%"
-          f"（单篇最大来源 {summary['single_max_ratio'] * 100:.1f}%）")
+    summary = run_check(
+        Path(args.db),
+        Path(args.reports),
+        Path(args.file),
+        use_semantic=not args.no_semantic,
+        verbose=True,
+    )
+    print(
+        f"\n总相似比：{summary['total_ratio'] * 100:.1f}%"
+        f"（单篇最大来源 {summary['single_max_ratio'] * 100:.1f}%）"
+    )
     for s in summary.get("sources", [])[:5]:
         print(f"  - {s['name']}：{s['ratio'] * 100:.1f}%（{s['n_matches']} 句）")
     print(f"报告：{summary['html_path']}")
@@ -129,8 +147,9 @@ def main(argv=None) -> int:
     common.add_argument("--db", default=str(DEFAULT_DB), help="比对库 SQLite 路径")
     common.add_argument("--reports", default=str(DEFAULT_REPORTS), help="报告输出目录")
 
-    ap = argparse.ArgumentParser(prog="paper_check", description="论文查重（本地三级漏斗引擎）",
-                                 parents=[common])
+    ap = argparse.ArgumentParser(
+        prog="paper_check", description="论文查重（本地三级漏斗引擎）", parents=[common]
+    )
     sub = ap.add_subparsers(dest="command", required=True)
 
     p1 = sub.add_parser("index", help="建设比对库", parents=[common])

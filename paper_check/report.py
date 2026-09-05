@@ -49,8 +49,12 @@ def render_summary(res: CheckResult, report_no: str, params: dict) -> dict:
         "matched_chars": res.matched_chars,
         "body_chars": res.body_chars,
         "sources": [
-            {"name": s.name, "ratio": s.ratio, "matched_chars": s.matched_chars,
-             "n_matches": s.n_matches}
+            {
+                "name": s.name,
+                "ratio": s.ratio,
+                "matched_chars": s.matched_chars,
+                "n_matches": s.n_matches,
+            }
             for s in res.sources
         ],
         "chapters": res.chapters,
@@ -73,7 +77,6 @@ def render_html(res: CheckResult, report_no: str, summary: dict) -> str:
 
     # ---------- 正文逐句渲染 ----------
     body_parts, sent_json = [], []
-    matched = set(tier_by_q.keys())
     for s in prepared.sentences:
         m = tier_by_q.get(s.idx)
         if m:
@@ -81,18 +84,30 @@ def render_html(res: CheckResult, report_no: str, summary: dict) -> str:
             body_parts.append(
                 f'<span class="hit" id="q{s.idx}" style="background:{color}33;'
                 f'border-bottom:2px solid {color}" '
-                f'onclick="showMatch({s.idx})">{esc(s.display)}</span>')
-            sent_json.append({
-                "idx": s.idx, "text": s.display, "tier": m.tier, "sim": m.sim,
-                "cos": m.semantic_cos,
-                "chapter": prepared.chapter_of(s.start),
-                "matches": [
-                    {"doc": x.doc_name, "text": x.s_display, "sim": x.sim,
-                     "tier": x.tier, "cos": x.semantic_cos}
-                    for x in sorted(
-                        [y for y in res.matches if y.q_idx == s.idx],
-                        key=lambda y: -y.sim)[:3]]
-            })
+                f'onclick="showMatch({s.idx})">{esc(s.display)}</span>'
+            )
+            sent_json.append(
+                {
+                    "idx": s.idx,
+                    "text": s.display,
+                    "tier": m.tier,
+                    "sim": m.sim,
+                    "cos": m.semantic_cos,
+                    "chapter": prepared.chapter_of(s.start),
+                    "matches": [
+                        {
+                            "doc": x.doc_name,
+                            "text": x.s_display,
+                            "sim": x.sim,
+                            "tier": x.tier,
+                            "cos": x.semantic_cos,
+                        }
+                        for x in sorted(
+                            [y for y in res.matches if y.q_idx == s.idx], key=lambda y: -y.sim
+                        )[:3]
+                    ],
+                }
+            )
         else:
             body_parts.append(f"<span>{esc(s.display)}</span>")
     body_html = " ".join(body_parts)
@@ -100,26 +115,35 @@ def render_html(res: CheckResult, report_no: str, summary: dict) -> str:
 
     # ---------- 来源分布 ----------
     max_ratio = max((s.ratio for s in res.sources), default=0.0)
-    src_rows = "".join(
-        f"<tr><td class='mono'>{esc(s.name)}</td>"
-        f"<td class='num'>{s.matched_chars}</td>"
-        f"<td class='num'>{s.ratio * 100:.1f}%</td>"
-        f"<td><div class='bar'><div class='fill' style='width:{(s.ratio / max_ratio * 100) if max_ratio else 0:.0f}%'></div></div></td>"
-        f"<td class='num'>{s.n_matches}</td></tr>"
-        for s in res.sources) or "<tr><td colspan=5>未发现相似来源</td></tr>"
+    src_rows = (
+        "".join(
+            f"<tr><td class='mono'>{esc(s.name)}</td>"
+            f"<td class='num'>{s.matched_chars}</td>"
+            f"<td class='num'>{s.ratio * 100:.1f}%</td>"
+            f"<td><div class='bar'><div class='fill' style='width:{(s.ratio / max_ratio * 100) if max_ratio else 0:.0f}%'></div></div></td>"
+            f"<td class='num'>{s.n_matches}</td></tr>"
+            for s in res.sources
+        )
+        or "<tr><td colspan=5>未发现相似来源</td></tr>"
+    )
 
     # ---------- 章节热力 ----------
-    heat = "".join(
-        f"<div class='ch' style='background:{_heat_color(c['ratio'])}22;"
-        f"border-left:4px solid {_heat_color(c['ratio'])}'>"
-        f"<b>{esc(c['title'])}</b><br>"
-        f"<span class='num'>{c['ratio'] * 100:.1f}%</span>（{c['body_chars']} 字）</div>"
-        for c in res.chapters) or "<div class='ch'>未识别到章节结构</div>"
+    heat = (
+        "".join(
+            f"<div class='ch' style='background:{_heat_color(c['ratio'])}22;"
+            f"border-left:4px solid {_heat_color(c['ratio'])}'>"
+            f"<b>{esc(c['title'])}</b><br>"
+            f"<span class='num'>{c['ratio'] * 100:.1f}%</span>（{c['body_chars']} 字）</div>"
+            for c in res.chapters
+        )
+        or "<div class='ch'>未识别到章节结构</div>"
+    )
 
     legend = "　".join(
         f"<span class='lg'><i style='background:{c}33;border-bottom:2px solid {c}'></i>{label}"
         f"{'（≥0.80）' if k == 'copy' else '（0.65-0.80）' if k == 'near' else '（0.55-0.65）' if k == 'suspect' else '（语义相似）'}</span>"
-        for k, (c, label) in TIER_COLORS.items())
+        for k, (c, label) in TIER_COLORS.items()
+    )
 
     st = summary["params"].get("index_stats", {})
     pct = res.total_ratio * 100
@@ -158,14 +182,14 @@ th{{background:#34495e;color:#fff}} .num{{text-align:right;font-variant-numeric:
 @media(max-width:900px){{.split{{grid-template-columns:1fr}}.cards{{flex-wrap:wrap}}}}
 </style></head><body><div class="wrap">
 <div class="hd"><div><h2 style="margin:0">论文查重报告</h2>
-<div class="no">报告编号 {report_no}　文件 {esc(res.name)}　生成于 {summary['generated_at']}</div></div>
-<div style="text-align:right;font-size:12px;opacity:.85">比对库：{st.get('docs', 0)} 篇 / {st.get('sentences', 0)} 句<br>语义通道：{esc(res.semantic_model) or '未启用'}<br>耗时 {res.timings.get('total_ms', 0)} ms</div></div>
+<div class="no">报告编号 {report_no}　文件 {esc(res.name)}　生成于 {summary["generated_at"]}</div></div>
+<div style="text-align:right;font-size:12px;opacity:.85">比对库：{st.get("docs", 0)} 篇 / {st.get("sentences", 0)} 句<br>语义通道：{esc(res.semantic_model) or "未启用"}<br>耗时 {res.timings.get("total_ms", 0)} ms</div></div>
 
 <div class="cards">
-<div class="card {'warn' if pct >= 30 else ''}"><div class="v">{pct:.1f}%</div><div class="l">总相似比（{level}）— {res.matched_chars}/{res.body_chars} 字</div></div>
+<div class="card {"warn" if pct >= 30 else ""}"><div class="v">{pct:.1f}%</div><div class="l">总相似比（{level}）— {res.matched_chars}/{res.body_chars} 字</div></div>
 <div class="card"><div class="v">{res.single_max_ratio * 100:.1f}%</div><div class="l">单篇最大来源占比</div></div>
 <div class="card"><div class="v">{len(res.sources)}</div><div class="l">相似来源文献数</div></div>
-<div class="card"><div class="v">{res.timings.get('n_query_sentences', 0)}</div><div class="l">送检句数</div></div>
+<div class="card"><div class="v">{res.timings.get("n_query_sentences", 0)}</div><div class="l">送检句数</div></div>
 </div>
 
 <div class="sec"><h3>相似来源分布</h3><table><tr><th>来源文献</th><th>重合字符</th><th>占全文</th><th>分布</th><th>命中句数</th></tr>{src_rows}</table></div>
@@ -177,8 +201,8 @@ th{{background:#34495e;color:#fff}} .num{{text-align:right;font-variant-numeric:
 <div class="pane" id="evi"><h3 style="margin:0 0 8px;font-size:14px">来源对照</h3><div id="evi-body" style="color:#7f8c8d;font-size:13px">点击左侧任意染色句，此处显示对应的来源原文与相似度。</div></div>
 </div>
 
-<div class="ft">参数：{esc(json.dumps(summary['params'], ensure_ascii=False))}<br>
-{('备注：' + esc('；'.join(summary['notes'])) + '<br>') if summary['notes'] else ''}
+<div class="ft">参数：{esc(json.dumps(summary["params"], ensure_ascii=False))}<br>
+{("备注：" + esc("；".join(summary["notes"])) + "<br>") if summary["notes"] else ""}
 说明：本报告由本地查重引擎生成，相似度分级为辅助初筛参考，最终认定须由人工复核；
 报告编号可用于防伪核验（与出具方记录比对）。</div></div>
 
@@ -209,5 +233,6 @@ def save_report(res: CheckResult, out_dir: Path, params: dict) -> tuple[Path, st
     path = out_dir / f"查重报告__{Path(res.name).stem}.html"
     path.write_text(html_text, encoding="utf-8")
     (out_dir / f"查重摘要__{Path(res.name).stem}.json").write_text(
-        json.dumps(summary, ensure_ascii=False, indent=1), encoding="utf-8")
+        json.dumps(summary, ensure_ascii=False, indent=1), encoding="utf-8"
+    )
     return path, report_no, summary

@@ -1,0 +1,31 @@
+# 工程规范配置（ruff lint/format + mypy 宽松档）。
+# 本文件仅承载工具配置，不含构建/打包信息；运行依赖见 requirements.txt。
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+  "E",   # pycodestyle 错误
+  "W",   # pycodestyle 警告
+  "F",   # pyflakes
+  "I",   # import 排序
+  "N",   # 命名规范
+  "UP",  # pyupgrade（旧语法升级）
+  "B",   # flake8-bugbear（常见 bug）
+  "SIM", # flake8-simplify（可简化写法）
+]
+ignore = [
+  # 行长交给 ruff format 管辖；存量代码的大量中文注释/长字符串无法自动换行，
+  # 逐条改写会引入大量与逻辑无关的 diff，故对老代码放宽 E501。
+  "E501",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI 依赖注入的默认参数写法（UploadFile = File(...)）是框架惯例，B008 属误报
+"paper_check/service.py" = ["B008"]
+
+[tool.mypy]
+# 宽松起步：先接入门禁，后续逐步收紧（如加 disallow_untyped_defs）
+ignore_missing_imports = true

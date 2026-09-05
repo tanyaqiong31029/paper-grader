@@ -78,7 +78,8 @@ def make_query_docx():
     d.add_heading("大语言模型辅助研究生学习的行为研究", level=0)
     d.add_paragraph(
         "摘要：本文考察大语言模型在研究生课程学习中的使用行为与成效，"
-        "从使用频率、问题类型与学习成效三个维度进行实证分析，并讨论其风险。")
+        "从使用频率、问题类型与学习成效三个维度进行实证分析，并讨论其风险。"
+    )
     d.add_paragraph("关键词：大语言模型；研究生学习；行为研究")
     d.add_heading("第一章 引言", level=1)
     d.add_paragraph(QUERY_TAKEN_1)
@@ -91,7 +92,8 @@ def make_query_docx():
     d.add_paragraph(
         "研究发现学生对智能答疑工具的使用呈现明显的两极分化，高频使用者的课程完成质量更优，"
         "但部分学生存在直接抄取模型答案的倾向。建议在课程考核中引入过程性评价，"
-        "并对模型输出的引用作出明确规范。")
+        "并对模型输出的引用作出明确规范。"
+    )
     d.add_paragraph("参考文献")
     d.add_paragraph("[1] 张某某. 大语言模型教育应用研究[J]. 现代教育技术, 2025.")
     path = Path(__file__).resolve().parent.parent / "samples" / "查重测试_学生论文_部分抄袭.docx"

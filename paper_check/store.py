@@ -73,16 +73,11 @@ class LibraryStore:
             (sha, name, prepared.body_chars, len(prepared.sentences), time.time()),
         )
         if cur.rowcount == 0:  # 已存在（按内容哈希去重）
-            return self.conn.execute(
-                "SELECT id FROM docs WHERE sha256=?", (sha,)
-            ).fetchone()[0]
+            return self.conn.execute("SELECT id FROM docs WHERE sha256=?", (sha,)).fetchone()[0]
         doc_id = cur.lastrowid
         self.conn.executemany(
             "INSERT OR REPLACE INTO sentences(doc_id,sent_idx,fp,norm,display) VALUES(?,?,?,?,?)",
-            [
-                (doc_id, s.idx, simhash_fp(s.norm), s.norm, s.display)
-                for s in prepared.sentences
-            ],
+            [(doc_id, s.idx, simhash_fp(s.norm), s.norm, s.display) for s in prepared.sentences],
         )
         self.conn.commit()
         return doc_id
@@ -111,12 +106,26 @@ class LibraryStore:
         return "".join(r[0] for r in rows)
 
     # ---------- 报告（秒传支撑） ----------
-    def save_report(self, report_no: str, query_sha: str, params_key: str,
-                    total_ratio: float, html_path: str, summary: dict) -> None:
+    def save_report(
+        self,
+        report_no: str,
+        query_sha: str,
+        params_key: str,
+        total_ratio: float,
+        html_path: str,
+        summary: dict,
+    ) -> None:
         self.conn.execute(
             "INSERT OR REPLACE INTO reports VALUES(?,?,?,?,?,?,?)",
-            (report_no, query_sha, params_key, time.time(), total_ratio,
-             html_path, json.dumps(summary, ensure_ascii=False)),
+            (
+                report_no,
+                query_sha,
+                params_key,
+                time.time(),
+                total_ratio,
+                html_path,
+                json.dumps(summary, ensure_ascii=False),
+            ),
         )
         self.conn.commit()
 

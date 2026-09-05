@@ -18,8 +18,8 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 
-from .cli import DEFAULT_DB, DEFAULT_REPORTS, build_params_key, run_check
-from .store import LibraryStore, sha256_of
+from .cli import DEFAULT_DB, DEFAULT_REPORTS, run_check
+from .store import LibraryStore
 
 app = FastAPI(title="论文查重服务", version="0.1.0")
 
@@ -50,28 +50,40 @@ async def submit(file: UploadFile = File(...), use_semantic: bool = Form(True)):
         raise HTTPException(400, "仅支持 PDF / DOCX / TXT / MD")
     task_id = uuid.uuid4().hex[:12]
     raw = await file.read()
-    _tasks[task_id] = {"status": "queued", "stage": "排队中", "pct": 0,
-                       "message": "", "filename": file.filename}
+    _tasks[task_id] = {
+        "status": "queued",
+        "stage": "排队中",
+        "pct": 0,
+        "message": "",
+        "filename": file.filename,
+    }
 
     def work():
         tmp = None
         try:
             _tasks[task_id].update(status="running", stage="解析", pct=5, message="解析文档")
-            with tempfile.NamedTemporaryFile(suffix=Path(file.filename).suffix,
-                                             delete=False) as tf:
+            with tempfile.NamedTemporaryFile(suffix=Path(file.filename).suffix, delete=False) as tf:
                 tf.write(raw)
                 tmp = Path(tf.name)
-            summary = run_check(DEFAULT_DB, DEFAULT_REPORTS, tmp,
-                                use_semantic=use_semantic, verbose=False)
+            summary = run_check(
+                DEFAULT_DB, DEFAULT_REPORTS, tmp, use_semantic=use_semantic, verbose=False
+            )
             _tasks[task_id].update(
-                status="done", stage="完成", pct=100, message="检测完成",
-                report_no=summary["report_no"], report_path=summary["html_path"],
+                status="done",
+                stage="完成",
+                pct=100,
+                message="检测完成",
+                report_no=summary["report_no"],
+                report_path=summary["html_path"],
                 total_ratio=summary["total_ratio"],
                 single_max=summary["single_max_ratio"],
-                sources=summary.get("sources", [])[:5], cached=summary.get("cached", False))
+                sources=summary.get("sources", [])[:5],
+                cached=summary.get("cached", False),
+            )
         except Exception as e:  # 单任务失败不影响服务
-            _tasks[task_id].update(status="error", stage="失败", pct=100,
-                                   message=f"{type(e).__name__}: {e}")
+            _tasks[task_id].update(
+                status="error", stage="失败", pct=100, message=f"{type(e).__name__}: {e}"
+            )
         finally:
             if tmp:
                 tmp.unlink(missing_ok=True)  # 送检文件即用即删

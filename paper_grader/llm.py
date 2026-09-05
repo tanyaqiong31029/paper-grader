@@ -48,7 +48,9 @@ class LLMClient:
 
     @property
     def enabled(self) -> bool:
-        return bool(self.cfg.api_key or "localhost" in self.cfg.base_url or "127.0.0.1" in self.cfg.base_url)
+        return bool(
+            self.cfg.api_key or "localhost" in self.cfg.base_url or "127.0.0.1" in self.cfg.base_url
+        )
 
     def chat(self, system: str, user: str) -> str:
         if not self.cfg.api_key:

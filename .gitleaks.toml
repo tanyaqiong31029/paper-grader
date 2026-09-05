@@ -1,0 +1,9 @@
+# gitleaks 配置：默认全部规则 + 模板占位符白名单
+[extend]
+useDefault = true
+
+[allowlist]
+description = "模板占位符与文档示例"
+regexes = [
+  '''(?i)(placeholder|changeme|your[-_](api[-_]?key|token|secret))''',
+]
