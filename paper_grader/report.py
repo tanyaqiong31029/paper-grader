@@ -135,7 +135,7 @@ def save_summary_xlsx(results: list[GradeResult], out_dir: Path) -> Path:
         n = len(ok)
         avg = sum(r.total for r in ok) / n
         stats_row = ws.max_row + 2
-        bands = {}
+        bands: dict[str, int] = {}
         for r in ok:
             bands[r.band] = bands.get(r.band, 0) + 1
         dist = "，".join(f"{b} {n_}人" for b, n_ in bands.items())

@@ -181,6 +181,7 @@ def grade_files(args) -> int:
     if failed:
         print(f"\n失败 {len(failed)} 篇：")
         for r in failed:
+            assert r.error is not None  # failed 仅由 error 非空的结果构成（见上方筛选）
             print(f"  ✗ {r.file}：{r.error[:150]}")
         print(f"失败清单：{save_failures_csv(failed, out_dir)}")
 

@@ -22,22 +22,24 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   lint:
-    name: Lint（ruff check + format）
+    name: Lint（ruff check + format + mypy）
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - name: 安装 ruff
-        run: pip install ruff
+      - name: 安装 ruff 与 mypy
+        run: pip install ruff mypy
       - name: Ruff lint
         run: ruff check .
       - name: Ruff format 校验
         run: ruff format --check .
+      - name: Mypy 类型检查
+        run: mypy .
 
   test:
-    name: Test（pytest）
+    name: Test（pytest + 覆盖率）
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -45,6 +47,6 @@ jobs:
         with:
           python-version: "3.13"
       - name: 安装依赖
-        run: pip install -r requirements.txt pytest
+        run: pip install -r requirements.txt pytest pytest-cov
       - name: Pytest
-        run: pytest tests/ -v
+        run: pytest tests/ -v --cov=paper_check --cov=paper_grader --cov-report=term-missing

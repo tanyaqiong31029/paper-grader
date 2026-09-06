@@ -15,7 +15,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from .engine import CheckResult
+from .engine import CheckResult, Match
 from .preprocess import PreparedDoc
 
 TIER_COLORS = {
@@ -68,8 +68,9 @@ def render_summary(res: CheckResult, report_no: str, params: dict) -> dict:
 
 def render_html(res: CheckResult, report_no: str, summary: dict) -> str:
     esc = html_mod.escape
+    assert res.prepared is not None  # render 只处理 check() 的产出，该路径下 prepared 必已生成
     prepared: PreparedDoc = res.prepared
-    tier_by_q = {}
+    tier_by_q: dict[int, Match] = {}
     for m in res.matches:
         cur = tier_by_q.get(m.q_idx)
         if cur is None or (m.sim, m.semantic_cos) > (cur.sim, cur.semantic_cos):
@@ -78,9 +79,9 @@ def render_html(res: CheckResult, report_no: str, summary: dict) -> str:
     # ---------- 正文逐句渲染 ----------
     body_parts, sent_json = [], []
     for s in prepared.sentences:
-        m = tier_by_q.get(s.idx)
-        if m:
-            color, _ = TIER_COLORS[m.tier]
+        hit = tier_by_q.get(s.idx)
+        if hit:
+            color, _ = TIER_COLORS[hit.tier]
             body_parts.append(
                 f'<span class="hit" id="q{s.idx}" style="background:{color}33;'
                 f'border-bottom:2px solid {color}" '
@@ -90,9 +91,9 @@ def render_html(res: CheckResult, report_no: str, summary: dict) -> str:
                 {
                     "idx": s.idx,
                     "text": s.display,
-                    "tier": m.tier,
-                    "sim": m.sim,
-                    "cos": m.semantic_cos,
+                    "tier": hit.tier,
+                    "sim": hit.sim,
+                    "cos": hit.semantic_cos,
                     "chapter": prepared.chapter_of(s.start),
                     "matches": [
                         {
