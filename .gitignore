@@ -20,3 +20,4 @@ Thumbs.db
 # 密钥与本地配置（切勿提交真实 key）
 .env
 *.local.yaml
+uv.lock

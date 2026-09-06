@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from typing import Protocol
 
 import numpy as np
 
@@ -42,9 +43,15 @@ class SemanticModel:
         return "base"
 
 
+class SentenceEmbedder(Protocol):
+    """句向量模型的最小结构接口：任何提供 encode 的模型（如 SentenceTransformer）均可注入。"""
+
+    def encode(self, texts: list[str], *, normalize_embeddings: bool = False) -> np.ndarray: ...
+
+
 @dataclass
 class STSemantic(SemanticModel):
-    model: object
+    model: SentenceEmbedder
     _name: str = field(default="st-semantic", init=False)
 
     def embed(self, texts: list[str]) -> np.ndarray:

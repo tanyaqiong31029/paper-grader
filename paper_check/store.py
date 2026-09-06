@@ -75,6 +75,8 @@ class LibraryStore:
         if cur.rowcount == 0:  # 已存在（按内容哈希去重）
             return self.conn.execute("SELECT id FROM docs WHERE sha256=?", (sha,)).fetchone()[0]
         doc_id = cur.lastrowid
+        # 走到此处 INSERT 必已成功（rowcount != 0），lastrowid 必为新生成主键
+        assert doc_id is not None
         self.conn.executemany(
             "INSERT OR REPLACE INTO sentences(doc_id,sent_idx,fp,norm,display) VALUES(?,?,?,?,?)",
             [(doc_id, s.idx, simhash_fp(s.norm), s.norm, s.display) for s in prepared.sentences],
