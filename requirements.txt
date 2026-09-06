@@ -6,7 +6,8 @@ httpx==0.28.1
 PyYAML==6.0.3
 
 # paper_check 查重模块
-numpy==2.5.2
+numpy==2.4.6; python_version < "3.12"
+numpy==2.5.2; python_version >= "3.12"
 fastapi==0.141.1
 uvicorn==0.52.4
 python-multipart==0.0.32

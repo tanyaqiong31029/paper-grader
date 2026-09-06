@@ -43,9 +43,7 @@ def _cleanup_expired() -> None:
     now = time.time()
     with _tasks_lock:
         expired = [
-            tid
-            for tid, t in _tasks.items()
-            if now - t.get("created_ts", now) > TASK_TTL_SECONDS
+            tid for tid, t in _tasks.items() if now - t.get("created_ts", now) > TASK_TTL_SECONDS
         ]
         for tid in expired:
             _tasks.pop(tid, None)
@@ -90,11 +88,11 @@ async def submit(request: Request, file: UploadFile = File(...), use_semantic: b
             raise HTTPException(429, "检测任务过多，请稍后再试")
     cl = request.headers.get("content-length")
     if cl and cl.isdigit() and int(cl) > MAX_UPLOAD_BYTES + 1024 * 1024:
-        raise HTTPException(413, f"上传内容超过 {MAX_UPLOAD_BYTES // (1024*1024)}MB 上限")
+        raise HTTPException(413, f"上传内容超过 {MAX_UPLOAD_BYTES // (1024 * 1024)}MB 上限")
     task_id = uuid.uuid4().hex[:12]
     raw = await file.read()
     if len(raw) > MAX_UPLOAD_BYTES:
-        raise HTTPException(413, f"上传文件超过 {MAX_UPLOAD_BYTES // (1024*1024)}MB 上限")
+        raise HTTPException(413, f"上传文件超过 {MAX_UPLOAD_BYTES // (1024 * 1024)}MB 上限")
     _tasks[task_id] = {
         "status": "queued",
         "stage": "排队中",
@@ -154,7 +152,8 @@ def report(task_id: str, request: Request):
     if not t or t.get("status") != "done":
         raise HTTPException(404, "报告不存在或未完成")
     return FileResponse(
-        t["report_path"], media_type="text/html",
+        t["report_path"],
+        media_type="text/html",
         headers={"Cache-Control": "no-store"},
     )
 

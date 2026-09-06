@@ -150,6 +150,7 @@ class Grader:
 
     def _maybe_redact(self, text: str) -> str:
         from .pii import redact_pii
+
         return redact_pii(text) if self.redact_pii else text
 
     # ---- 单篇论文入口 ----
