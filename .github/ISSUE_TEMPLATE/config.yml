@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: "📖 README（部署与配置）"
+    url: "https://github.com/tanyaqiong31029/paperlens#readme"
+    about: "启动、管理员令牌、外部引擎 Key 配置说明"

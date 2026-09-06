@@ -39,14 +39,37 @@ jobs:
         run: mypy .
 
   test:
-    name: Test（pytest + 覆盖率）
+    name: Test（pytest + 覆盖率门槛，Py ${{ matrix.python-version }}）
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: 安装依赖
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Pytest（覆盖率门槛 45%）
+        run: pytest tests/ -v --cov=paper_check --cov=paper_grader --cov-report=term-missing --cov-fail-under=45
+      - name: 上传覆盖率报告
+        if: matrix.python-version == '3.13'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: .coverage
+          retention-days: 14
+
+  pip-audit:
+    name: pip-audit（后端依赖已知漏洞）
+    runs-on: ubuntu-latest
+    continue-on-error: true   # 暂不阻塞，结果作为依赖周报输入
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - name: 安装依赖
-        run: pip install -r requirements.txt pytest pytest-cov
-      - name: Pytest
-        run: pytest tests/ -v --cov=paper_check --cov=paper_grader --cov-report=term-missing
+      - run: pip install pip-audit
+      - run: pip-audit -r requirements.txt

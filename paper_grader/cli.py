@@ -44,6 +44,17 @@ def build_argparser() -> argparse.ArgumentParser:
     g.add_argument("--mock", action="store_true", help="试运行，不调用大模型")
     g.add_argument("--force", action="store_true", help="忽略缓存重新批改")
     g.add_argument("--config", default=None, help="配置文件路径")
+    g.add_argument(
+        "--local-only",
+        action="store_true",
+        help="只允许本地模型端点（localhost/127.0.0.1），正文不出本机",
+    )
+    g.add_argument(
+        "--confirm-remote",
+        action="store_true",
+        help="非交互确认：论文将发送给配置的外部模型服务（CI/脚本用）",
+    )
+    g.add_argument("--redact-pii", action="store_true", help="发送前脱敏邮箱/手机号/学号等 PII")
 
     r = sub.add_parser("report", help="从缓存重新生成汇总 Excel")
     r.add_argument("--out", default="output", help="缓存所在目录")
@@ -93,6 +104,33 @@ def grade_files(args) -> int:
         )
         return 1
 
+    # ---- 数据流向同意机制 ----
+    # 默认 config.yaml 指向外部模型服务（如智谱）。未明确确认前拒绝发送，
+    # 避免首次使用者不了解数据流就上传学生论文。
+    base = cfg.llm.base_url
+    is_local = "localhost" in base or "127.0.0.1" in base
+    if not args.mock:
+        if args.local_only and not is_local:
+            print(f"[错误] --local-only 与当前配置冲突：base_url={base} 不是本地端点。")
+            print("请在 config.yaml 切换为本地模型（如 Ollama http://localhost:11434/v1）。")
+            return 1
+        if not is_local and not args.confirm_remote:
+            print("=" * 62)
+            print("⚠️  数据流向确认")
+            print(f"论文内容将发送给外部模型服务：{base}（模型 {cfg.llm.model}）")
+            print("论文可能包含个人信息、未发表研究内容。发送前请：")
+            print("  1) 确认拥有论文的处置权；2) 查阅该服务商的数据保留政策；")
+            print("  3) 需要时可加 --redact-pii 脱敏，或 --local-only 改用本地模型。")
+            print("=" * 62)
+            if sys.stdin.isatty():
+                answer = input("确认发送？(yes/no)：").strip().lower()
+                if answer != "yes":
+                    print("已取消。可加 --local-only 使用本地模型，或 --confirm-remote 跳过确认。")
+                    return 1
+            else:
+                print("[错误] 非交互环境需显式确认：加 --confirm-remote（或 --local-only）。")
+                return 1
+
     results: list[GradeResult] = []
     pending: list[tuple[Path, str]] = []
     t0 = time.time()
@@ -115,7 +153,7 @@ def grade_files(args) -> int:
     def work(item: tuple[Path, str]) -> GradeResult:
         path, ptype = item
         rubric = load_rubric(cfg, ptype)
-        grader = Grader(cfg, client, rubric, mock=args.mock)
+        grader = Grader(cfg, client, rubric, mock=args.mock, redact_pii=args.redact_pii)
         try:
             paper = extract_paper(path)
             res = grader.grade(paper)

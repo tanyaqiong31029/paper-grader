@@ -1,0 +1,88 @@
+name: "🐛 Bug 报告"
+description: "报告 PaperLens 的问题（请勿粘贴论文原文、API Key 或管理员令牌）"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！⚠️ 提交前请务必脱敏：**不要粘贴论文原文、API Key、管理员令牌（X-Admin-Token）**。
+  - type: dropdown
+    id: deploy
+    attributes:
+      label: 部署方式
+      options:
+        - start.sh 直接启动
+        - setup.sh 安装后启动
+        - 手动运行 backend/frontend
+        - 其他
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: 操作系统
+      placeholder: "如 macOS 15 / Ubuntu 24.04 / Windows 11"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: "commit 哈希或克隆日期"
+      placeholder: "如 a1b2c3d"
+    validations:
+      required: true
+  - type: input
+    id: py-ver
+    attributes:
+      label: Python / Node 版本
+      placeholder: "如 Python 3.11.9 / Node 20"
+    validations:
+      required: true
+  - type: dropdown
+    id: module
+    attributes:
+      label: 出错模块
+      options:
+        - 文档查重
+        - 联网核查
+        - OA 语料采集
+        - AIGC 检测
+        - 多引擎对比 / 外部 Key
+        - 降重改写
+        - 报告导出
+        - 部署/启动
+        - 其他
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤
+      description: 最短操作序列（论文内容请脱敏为「文档A/句子B」）
+      placeholder: |
+        1. bash start.sh 启动
+        2. 上传 文档A（脱敏说明：中文论文，约 8000 字）
+        3. 点击 …，出现 …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为 vs 实际行为
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 后端/浏览器控制台日志（已脱敏）
+      description: "⚠️ 请移除 API Key、管理员令牌与论文内容后再粘贴。"
+  - type: checkboxes
+    id: sanity
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 日志已脱敏，不含论文原文 / API Key / 管理员令牌
+          required: true
+        - label: 我已检索现有 Issue，确认没有重复
+          required: true

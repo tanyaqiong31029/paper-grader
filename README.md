@@ -1,5 +1,7 @@
 # 论文批改 + 查重工具集（Paper Grader & Checker）
 
+> ⚠️ **原型声明**：paper_check 查重 Web 服务为单机原型（无认证、任务存内存），**不可直接暴露公网**；paper_grader 默认配置会把论文发送给外部模型服务，首次运行需显式确认。详见下方「隐私与数据流向」。
+
 本仓库包含两个模块：
 
 1. **paper_grader** —— 面向教师的**中文学术论文 AI 辅助批量批改**命令行工具：把一个文件夹里的论文（期刊投稿、研究生课程论文、学位/毕业论文）批量交给大模型，按可插拔的评分量规逐维度打分，产出**单篇批改报告（Markdown）+ 全批成绩汇总（Excel）**。
@@ -170,3 +172,22 @@ config.yaml       # 量规、模型、批改参数（改这里即可定制）
 samples/          # 三篇样例论文（course docx / thesis docx / journal pdf）
 tests/            # 无需 API Key 的流水线测试
 ```
+
+## 隐私与数据流向
+
+**定位**：默认本地处理（查重在本地比对库上完成）；只有当你在 config.yaml 配置了
+外部模型服务并显式确认后，论文内容才会离开本机。
+
+| 场景 | 数据去向 | 触发条件 |
+|---|---|---|
+| paper_check 查重 | 不出本机（临时文件检测完即删） | 直接使用 |
+| paper_grader + 本地 Ollama | 不出本机 | base_url 指向 localhost |
+| paper_grader + 外部模型（默认智谱） | 正文分块发送给服务商（≤24,000 字符/篇） | `--confirm-remote` 或交互输入 yes |
+
+- `--local-only`：强制仅本地端点，配置了外部服务时直接拒绝启动；
+- `--redact-pii`：发送前脱敏邮箱/手机号/身份证号/学号；
+- 批改报告会记录实际使用的 provider（base_url + 模型）与是否脱敏；
+- 服务商的数据保留政策请自行查阅（如智谱：bigmodel.cn 的隐私条款）；
+- paper_check 可用环境变量 `PAPER_CHECK_TOKEN` 启用令牌鉴权，
+  `PAPER_CHECK_TASK_TTL` 控制任务保留时长（默认 2 小时）。
+

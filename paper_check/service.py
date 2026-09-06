@@ -10,21 +10,55 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
+import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 
 from .cli import DEFAULT_DB, DEFAULT_REPORTS, run_check
 from .store import LibraryStore
 
-app = FastAPI(title="论文查重服务", version="0.1.0")
+# ⚠️ 本服务为单机原型：默认无认证、任务存于内存。请勿直接暴露公网；
+# 局域网部署建议置于反向代理（HTTPS）之后，并设置 PAPER_CHECK_TOKEN。
+app = FastAPI(title="论文查重服务", version="0.2.0")
 
 _pool = ThreadPoolExecutor(max_workers=2)
 _tasks: dict = {}
+_tasks_lock = threading.Lock()
+
+MAX_UPLOAD_BYTES = int(os.environ.get("PAPER_CHECK_MAX_UPLOAD_MB", "10")) * 1024 * 1024
+MAX_TASKS = int(os.environ.get("PAPER_CHECK_MAX_TASKS", "20"))
+TASK_TTL_SECONDS = int(os.environ.get("PAPER_CHECK_TASK_TTL", "7200"))  # 2 小时
+ACCESS_TOKEN = os.environ.get("PAPER_CHECK_TOKEN", "").strip()
+
+
+def _cleanup_expired() -> None:
+    """惰性 TTL 清理：移除超过保留期或超过总量的最旧任务。"""
+    now = time.time()
+    with _tasks_lock:
+        expired = [
+            tid
+            for tid, t in _tasks.items()
+            if now - t.get("created_ts", now) > TASK_TTL_SECONDS
+        ]
+        for tid in expired:
+            _tasks.pop(tid, None)
+        # 仍超上限则按创建时间淘汰最旧
+        while len(_tasks) > MAX_TASKS:
+            oldest = min(_tasks, key=lambda tid: _tasks[tid].get("created_ts", 0))
+            _tasks.pop(oldest, None)
+
+
+def _require_token(request: Request) -> None:
+    """设置 PAPER_CHECK_TOKEN 后，所有接口要求 X-Admin-Token。"""
+    if ACCESS_TOKEN and request.headers.get("x-admin-token") != ACCESS_TOKEN:
+        raise HTTPException(401, "需要管理员令牌（X-Admin-Token）")
 
 
 def _get_engine_ready(db: Path):
@@ -40,22 +74,34 @@ def index_page():
 
 
 @app.get("/api/stats")
-def stats():
+def stats(request: Request):
+    _require_token(request)
     return _get_engine_ready(DEFAULT_DB)
 
 
 @app.post("/api/check")
-async def submit(file: UploadFile = File(...), use_semantic: bool = Form(True)):
+async def submit(request: Request, file: UploadFile = File(...), use_semantic: bool = Form(True)):
+    _require_token(request)
     if not file.filename or not file.filename.lower().endswith((".pdf", ".docx", ".txt", ".md")):
         raise HTTPException(400, "仅支持 PDF / DOCX / TXT / MD")
+    _cleanup_expired()
+    with _tasks_lock:
+        if len(_tasks) >= MAX_TASKS:
+            raise HTTPException(429, "检测任务过多，请稍后再试")
+    cl = request.headers.get("content-length")
+    if cl and cl.isdigit() and int(cl) > MAX_UPLOAD_BYTES + 1024 * 1024:
+        raise HTTPException(413, f"上传内容超过 {MAX_UPLOAD_BYTES // (1024*1024)}MB 上限")
     task_id = uuid.uuid4().hex[:12]
     raw = await file.read()
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, f"上传文件超过 {MAX_UPLOAD_BYTES // (1024*1024)}MB 上限")
     _tasks[task_id] = {
         "status": "queued",
         "stage": "排队中",
         "pct": 0,
         "message": "",
         "filename": file.filename,
+        "created_ts": time.time(),
     }
 
     def work():
@@ -93,7 +139,8 @@ async def submit(file: UploadFile = File(...), use_semantic: bool = Form(True)):
 
 
 @app.get("/api/task/{task_id}")
-def task_status(task_id: str):
+def task_status(task_id: str, request: Request):
+    _require_token(request)
     t = _tasks.get(task_id)
     if not t:
         raise HTTPException(404, "任务不存在")
@@ -101,11 +148,15 @@ def task_status(task_id: str):
 
 
 @app.get("/api/report/{task_id}", response_class=HTMLResponse)
-def report(task_id: str):
+def report(task_id: str, request: Request):
+    _require_token(request)
     t = _tasks.get(task_id)
     if not t or t.get("status") != "done":
         raise HTTPException(404, "报告不存在或未完成")
-    return FileResponse(t["report_path"], media_type="text/html")
+    return FileResponse(
+        t["report_path"], media_type="text/html",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 UPLOAD_PAGE = """<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8">

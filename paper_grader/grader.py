@@ -59,6 +59,7 @@ class GradeResult:
     n_chars: int = 0
     mock: bool = False
     error: str | None = None
+    provider: str = ""
     version: str = "0.1.0"
 
     def to_dict(self) -> dict:
@@ -133,11 +134,23 @@ def _sample_excerpt(text: str, limit: int = 3600) -> str:
 
 
 class Grader:
-    def __init__(self, cfg: AppConfig, client: LLMClient, rubric: Rubric, mock: bool = False):
+    def __init__(
+        self,
+        cfg: AppConfig,
+        client: LLMClient,
+        rubric: Rubric,
+        mock: bool = False,
+        redact_pii: bool = False,
+    ):
         self.cfg = cfg
         self.client = client
         self.rubric = rubric
         self.mock = mock
+        self.redact_pii = redact_pii
+
+    def _maybe_redact(self, text: str) -> str:
+        from .pii import redact_pii
+        return redact_pii(text) if self.redact_pii else text
 
     # ---- 单篇论文入口 ----
     def grade(self, paper: PaperText) -> GradeResult:
@@ -158,6 +171,12 @@ class Grader:
         total = round(sum(d.score * d.weight for d in dims) / 100, 1)
         confidence = round(min(1.0, sum(d.confidence for d in dims) / len(dims)), 2)
 
+        provider = (
+            "mock（不调用模型）"
+            if self.mock
+            else f"{self.cfg.llm.base_url} · {self.cfg.llm.model}"
+            + ("，已启用 PII 脱敏" if self.redact_pii else "")
+        )
         res = GradeResult(
             file=str(paper.path.name),
             title=meta["title"] or paper.path.stem,
@@ -169,6 +188,7 @@ class Grader:
             dimensions=dims,
             n_chars=meta["n_chars"],
             mock=self.mock,
+            provider=provider,
         )
         if not self.mock:
             try:
@@ -192,7 +212,7 @@ class Grader:
                 '"weaknesses": ["问题1"], "quotes": ["代表性原文片段1"]}\n\n'
                 f"【第 {i} 部分原文】\n{chunk}"
             )
-            data = self.client.chat_json(JUDGE_SYSTEM, user)
+            data = self.client.chat_json(JUDGE_SYSTEM, self._maybe_redact(user))
             notes.append(
                 f"[第{i}部分] {data.get('summary', '')}"
                 f" 亮点：{'；'.join(map(str, data.get('strengths', [])[:3]))}"
@@ -227,7 +247,7 @@ class Grader:
             '"comment": "该维度评语，具体指出做得好与不足，150字左右", '
             '"suspicions": "学术规范问题，无则留空"}'
         )
-        data = self.client.chat_json(JUDGE_SYSTEM, user)
+        data = self.client.chat_json(JUDGE_SYSTEM, self._maybe_redact(user))
         return self._normalize_dimension(dim, data)
 
     def _normalize_dimension(self, dim, data: dict) -> DimensionResult:
@@ -263,7 +283,7 @@ class Grader:
             '"improvements": ["修改建议1（要具体可操作）", "建议2", "建议3"], '
             '"flags": ["风险标记，如：疑似内容堆砌/文献陈旧/篇幅不足，没有则空数组"]}'
         )
-        data = self.client.chat_json(JUDGE_SYSTEM, user)
+        data = self.client.chat_json(JUDGE_SYSTEM, self._maybe_redact(user))
         res.overall_comment = str(data.get("overall_comment", "")).strip()
         res.strengths = [str(s) for s in (data.get("strengths") or []) if str(s).strip()][:5]
         res.improvements = [str(s) for s in (data.get("improvements") or []) if str(s).strip()][:5]

@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import random
 import re
 import time
 
@@ -45,6 +46,18 @@ class LLMClient:
     def __init__(self, cfg: LLMConfig):
         self.cfg = cfg
         self.usage = {"prompt_tokens": 0, "completion_tokens": 0, "requests": 0}
+        self._client: httpx.Client | None = None
+
+    def _http(self) -> httpx.Client:
+        """复用连接池的 HTTP 客户端（批量批改时减少握手开销）。"""
+        if self._client is None:
+            self._client = httpx.Client(timeout=self.cfg.timeout)
+        return self._client
+
+    def close(self) -> None:
+        if self._client is not None:
+            self._client.close()
+            self._client = None
 
     @property
     def enabled(self) -> bool:
@@ -76,8 +89,8 @@ class LLMClient:
         last_err: Exception | None = None
         for attempt in range(1, self.cfg.max_retries + 1):
             try:
-                with httpx.Client(timeout=self.cfg.timeout) as client:
-                    resp = client.post(url, json=payload, headers=headers)
+                client = self._http()
+                resp = client.post(url, json=payload, headers=headers)
                 if resp.status_code == 200:
                     data = resp.json()
                     usage = data.get("usage") or {}
@@ -87,11 +100,17 @@ class LLMClient:
                     return data["choices"][0]["message"]["content"]
                 if resp.status_code in (429, 500, 502, 503, 504):
                     last_err = LLMError(f"HTTP {resp.status_code}: {resp.text[:200]}")
+                    # 尊重服务端 Retry-After；否则指数退避 + 随机抖动
+                    retry_after = resp.headers.get("Retry-After")
                 else:
                     raise LLMError(f"HTTP {resp.status_code}: {resp.text[:300]}")
             except (httpx.TimeoutException, httpx.TransportError) as e:
                 last_err = e
-            wait = 5 * attempt
+                retry_after = None
+            if retry_after and str(retry_after).strip().isdigit():
+                wait = min(int(retry_after), 120)
+            else:
+                wait = min(60, 2**attempt) + random.uniform(0, 1)
             time.sleep(wait)
         raise LLMError(f"调用模型失败（已重试 {self.cfg.max_retries} 次）：{last_err}")
 
