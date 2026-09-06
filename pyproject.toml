@@ -1,5 +1,6 @@
 # 工程规范配置（ruff lint/format + mypy 宽松档）。
-# 本文件仅承载工具配置，不含构建/打包信息；运行依赖见 requirements.txt。
+# 本文件仅承载工具配置，不含构建/打包信息；运行依赖见 requirements.txt，
+# 版本锁定见 uv.lock；项目许可证为 MIT（见 LICENSE）。
 
 [tool.ruff]
 line-length = 100

@@ -191,3 +191,11 @@ tests/            # 无需 API Key 的流水线测试
 - paper_check 可用环境变量 `PAPER_CHECK_TOKEN` 启用令牌鉴权，
   `PAPER_CHECK_TASK_TTL` 控制任务保留时长（默认 2 小时）。
 
+
+## 许可证
+
+本项目采用 [MIT License](LICENSE)。
+
+- `samples/` 与 `corpus/` 下的样例论文与语料均为本仓库脚本（`scripts/`）生成的**合成内容**，随项目同许可分发；
+- README 中引用的第三方开源项目（LLM-AES、EssayJudge 等）版权归原作者所有，此处仅作方案致谢与出处标注；
+- 外部模型服务（智谱/DeepSeek/OpenAI）各自的服务条款与数据政策独立于本许可证。
