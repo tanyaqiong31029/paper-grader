@@ -20,6 +20,8 @@ from paper_check.report import save_report
 from paper_check.store import LibraryStore, sha256_of
 
 PASS = 0
+ROOT = Path(__file__).resolve().parent.parent
+CORPUS = ROOT / "corpus"  # 按测试文件定位，不依赖 pytest 的启动目录
 TMP = Path("/tmp/paper_check_test")
 
 
@@ -94,7 +96,7 @@ def test_align():
 
 def test_preprocess():
     print("[4] 预处理：参考文献剔除与章节识别")
-    text = Path("corpus/文献库_知识图谱综述.txt").read_text(encoding="utf-8")
+    text = (CORPUS / "文献库_知识图谱综述.txt").read_text(encoding="utf-8")
     doc = prepare(text, name="t")
     check("识别到章节", len(doc.chapters) >= 3, f"chapters={len(doc.chapters)}")
     check("剔除参考文献", doc.excluded_ref_chars > 0)
@@ -110,7 +112,7 @@ def test_e2e():
     TMP.mkdir(parents=True)
     store = LibraryStore(TMP / "lib.db")
     engine = DedupEngine(store)
-    for f in sorted(Path("corpus").glob("*.txt")):
+    for f in sorted(CORPUS.glob("*.txt")):
         text = f.read_text(encoding="utf-8")
         prepared = prepare(text, name=f.name)
         engine.add_document(sha256_of(text.encode()), f.name, prepared)
@@ -118,7 +120,7 @@ def test_e2e():
 
     from paper_check.extract_shared import extract_any
 
-    text, _ = extract_any(Path("samples/查重测试_学生论文_部分抄袭.docx"))
+    text, _ = extract_any(ROOT / "samples/查重测试_学生论文_部分抄袭.docx")
     prepared = prepare(text, name="查重测试.docx")
     res = engine.check(prepared)
 
@@ -167,7 +169,7 @@ def test_no_index_privacy():
     db = TMP / "privacy.db"
     store = LibraryStore(db)
     engine = DedupEngine(store)
-    lib_text = Path("corpus/文献库_知识图谱综述.txt").read_text(encoding="utf-8")
+    lib_text = (CORPUS / "文献库_知识图谱综述.txt").read_text(encoding="utf-8")
     engine.add_document(
         sha256_of(lib_text.encode()), "库文献.txt", prepare(lib_text, name="库文献.txt")
     )
@@ -175,7 +177,7 @@ def test_no_index_privacy():
 
     from paper_check.extract_shared import extract_any
 
-    text, _ = extract_any(Path("samples/查重测试_学生论文_部分抄袭.docx"))
+    text, _ = extract_any(ROOT / "samples/查重测试_学生论文_部分抄袭.docx")
     prepared = prepare(text, name="student.docx")
     res = engine.check(prepared)  # check 不调用 add_document
     check("查重结果正常产出", res.total_ratio > 0.15, f"ratio={res.total_ratio}")

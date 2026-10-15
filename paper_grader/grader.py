@@ -61,6 +61,8 @@ class GradeResult:
     error: str | None = None
     provider: str = ""
     version: str = "0.1.0"
+    # 相对输入目录的唯一键（见 extract.paper_key），用于缓存/报告文件名防同名覆盖
+    key: str = ""
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -128,6 +130,16 @@ def _sample_excerpt(text: str, limit: int = 3600) -> str:
     mid = text[len(text) // 2 - 300 : len(text) // 2 + 700]
     tail = text[-(limit - limit // 2 - 1000) :]
     return f"{head}\n\n……（中略）……\n\n{mid}\n\n……（后略）……\n\n{tail}"
+
+
+def _to_number(value, default: float) -> float:
+    """宽松数值解析：容忍模型返回 "78分"、"约 0.8"、"85/100" 之类（取第一个数字）。"""
+    if isinstance(value, bool) or value is None:
+        return default
+    if isinstance(value, int | float):
+        return float(value)
+    m = re.search(r"-?\d+(?:\.\d+)?", str(value))
+    return float(m.group(0)) if m else default
 
 
 # ---------- 评分流程 ----------
@@ -252,9 +264,9 @@ class Grader:
         return self._normalize_dimension(dim, data)
 
     def _normalize_dimension(self, dim, data: dict) -> DimensionResult:
-        score = float(data.get("score", 0))
+        score = _to_number(data.get("score"), 0.0)
         score = max(0.0, min(100.0, score))
-        conf = float(data.get("confidence", 0.7))
+        conf = _to_number(data.get("confidence"), 0.7)
         conf = max(0.0, min(1.0, conf))
         evidence = [str(e)[:80] for e in (data.get("evidence") or []) if str(e).strip()][:5]
         return DimensionResult(
@@ -313,6 +325,7 @@ class Grader:
         score = max(35, min(96, base + bonus))
 
         sents = [s.strip() for s in re.split(r"[。！？\n]", text) if 30 < len(s.strip()) < 90]
+        evidence: list[str] = []  # 短文可能没有合适长度的句子
         if sents:
             n = len(sents)
             idx = {h % n, (h // n) % n}

@@ -188,8 +188,9 @@ tests/            # 无需 API Key 的流水线测试
 - `--redact-pii`：发送前脱敏邮箱/手机号/身份证号/学号；
 - 批改报告会记录实际使用的 provider（base_url + 模型）与是否脱敏；
 - 服务商的数据保留政策请自行查阅（如智谱：bigmodel.cn 的隐私条款）；
-- paper_check 可用环境变量 `PAPER_CHECK_TOKEN` 启用令牌鉴权，
-  `PAPER_CHECK_TASK_TTL` 控制任务保留时长（默认 2 小时）。
+- paper_check 可用环境变量 `PAPER_CHECK_TOKEN` 启用令牌鉴权（内置上传页会提示输入令牌，
+  仅保存在当前标签页的 sessionStorage），`PAPER_CHECK_TASK_TTL` 控制任务保留时长（默认 2 小时）；
+  `serve --db/--reports` 会经 `PAPER_CHECK_DB` / `PAPER_CHECK_REPORTS` 传给 Web 服务。
 
 
 ## 许可证

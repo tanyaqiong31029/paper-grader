@@ -11,6 +11,7 @@ import json
 import random
 import re
 import time
+from urllib.parse import urlparse
 
 import httpx
 
@@ -19,6 +20,21 @@ from .config import LLMConfig
 
 class LLMError(RuntimeError):
     pass
+
+
+LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def is_local_endpoint(base_url: str) -> bool:
+    """按 URL 的 hostname 精确判断是否本机端点（Ollama 等本地模型无需 API Key）。
+
+    不能用子串匹配：如 https://localhost.evil.com 或 ?x=127.0.0.1 会被误判为本地。
+    """
+    try:
+        host = urlparse(base_url.strip()).hostname
+    except ValueError:
+        return False
+    return (host or "").lower() in LOCAL_HOSTS
 
 
 def parse_json_loose(text: str) -> dict:
@@ -60,13 +76,15 @@ class LLMClient:
             self._client = None
 
     @property
+    def is_local(self) -> bool:
+        return is_local_endpoint(self.cfg.base_url)
+
+    @property
     def enabled(self) -> bool:
-        return bool(
-            self.cfg.api_key or "localhost" in self.cfg.base_url or "127.0.0.1" in self.cfg.base_url
-        )
+        return bool(self.cfg.api_key) or self.is_local
 
     def chat(self, system: str, user: str) -> str:
-        if not self.cfg.api_key:
+        if not self.cfg.api_key and not self.is_local:
             raise LLMError(
                 "未配置 API Key。请设置环境变量 PAPER_GRADER_API_KEY，"
                 "或写入 config.yaml 的 llm.api_key；也可先用 --mock 模式试跑。"
@@ -80,10 +98,9 @@ class LLMClient:
             "temperature": self.cfg.temperature,
             "max_tokens": self.cfg.max_tokens,
         }
-        headers = {
-            "Authorization": f"Bearer {self.cfg.api_key}",
-            "Content-Type": "application/json",
-        }
+        headers = {"Content-Type": "application/json"}
+        if self.cfg.api_key:  # 本地端点（Ollama 等）无 Key 时不发送 Authorization
+            headers["Authorization"] = f"Bearer {self.cfg.api_key}"
         url = self.cfg.base_url.rstrip("/") + "/chat/completions"
 
         last_err: Exception | None = None

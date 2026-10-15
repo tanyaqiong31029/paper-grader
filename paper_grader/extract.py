@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -95,19 +97,61 @@ def extract_paper(path: str | Path) -> PaperText:
     return PaperText(path=path, title=title, text=text, warnings=warnings)
 
 
-def collect_papers(folder_or_file: str | Path) -> list[Path]:
-    """收集待批改的论文文件（自动跳过输出目录和隐藏文件）。"""
+def collect_papers(
+    folder_or_file: str | Path, exclude: str | Path | list[str | Path] | None = None
+) -> list[Path]:
+    """收集待批改的论文文件（自动跳过输出目录和隐藏文件）。
+
+    - exclude：需要排除的目录（如实际的 --out 目录），其下文件一律跳过；
+    - 名为 "output" 的目录只按“相对输入目录”的路径判断，避免输入目录本身
+      位于某个 output/ 之下时被整体误排除。
+    """
     p = Path(folder_or_file)
     if p.is_file():
         return [p]
-    if p.is_dir():
-        found = [
-            f
-            for f in sorted(p.rglob("*"))
-            if f.is_file()
-            and f.suffix.lower() in EXTRACT_SUFFIXES
-            and not f.name.startswith(("~", "."))
-            and "output" not in f.parts
-        ]
-        return found
-    raise FileNotFoundError(p)
+    if not p.is_dir():
+        raise FileNotFoundError(p)
+
+    if exclude is None:
+        excludes: list[Path] = []
+    elif isinstance(exclude, str | Path):
+        excludes = [Path(exclude).resolve()]
+    else:
+        excludes = [Path(e).resolve() for e in exclude]
+
+    def excluded(f: Path) -> bool:
+        rf = f.resolve()
+        return any(rf == e or e in rf.parents for e in excludes)
+
+    found = []
+    for f in sorted(p.rglob("*")):
+        if not f.is_file() or f.suffix.lower() not in EXTRACT_SUFFIXES:
+            continue
+        rel = f.relative_to(p)
+        if f.name.startswith(("~", ".")) or "output" in rel.parts[:-1]:
+            continue
+        if excluded(f):
+            continue
+        found.append(f)
+    return found
+
+
+def paper_key(path: Path, root: str | Path | None = None) -> str:
+    """论文的稳定唯一键（用于缓存与报告文件名）。
+
+    仅用文件名主干会让不同子目录下同名论文（如 1班/张三.docx 与 2班/张三.docx）
+    互相覆盖缓存与报告；这里取“相对输入目录的路径”的短哈希作为后缀，
+    主干保留可读性并清洗掉文件系统不安全字符。
+    """
+    path = Path(path)
+    rel = path.name
+    if root is not None:
+        r = Path(root)
+        if r.is_dir():
+            try:
+                rel = path.resolve().relative_to(r.resolve()).as_posix()
+            except ValueError:
+                rel = path.name
+    stem = re.sub(r"[^\w.\-]+", "_", Path(rel).stem).strip("._") or "paper"
+    digest = hashlib.sha1(rel.encode("utf-8")).hexdigest()[:8]
+    return f"{stem[:80]}__{digest}"

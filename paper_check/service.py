@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import hmac
 import os
 import tempfile
 import threading
@@ -21,7 +22,7 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 
-from .cli import DEFAULT_DB, DEFAULT_REPORTS, run_check
+from .cli import DEFAULT_DB, DEFAULT_REPORTS, ENV_DB, ENV_REPORTS, run_check
 from .store import LibraryStore
 
 # ⚠️ 本服务为单机原型：默认无认证、任务存于内存。请勿直接暴露公网；
@@ -36,6 +37,9 @@ MAX_UPLOAD_BYTES = int(os.environ.get("PAPER_CHECK_MAX_UPLOAD_MB", "10")) * 1024
 MAX_TASKS = int(os.environ.get("PAPER_CHECK_MAX_TASKS", "20"))
 TASK_TTL_SECONDS = int(os.environ.get("PAPER_CHECK_TASK_TTL", "7200"))  # 2 小时
 ACCESS_TOKEN = os.environ.get("PAPER_CHECK_TOKEN", "").strip()
+# `python -m paper_check serve --db/--reports` 经环境变量传入；未设置时用默认路径
+DB_PATH = Path(os.environ.get(ENV_DB) or DEFAULT_DB)
+REPORTS_DIR = Path(os.environ.get(ENV_REPORTS) or DEFAULT_REPORTS)
 
 
 def _cleanup_expired() -> None:
@@ -55,7 +59,11 @@ def _cleanup_expired() -> None:
 
 def _require_token(request: Request) -> None:
     """设置 PAPER_CHECK_TOKEN 后，所有接口要求 X-Admin-Token。"""
-    if ACCESS_TOKEN and request.headers.get("x-admin-token") != ACCESS_TOKEN:
+    if not ACCESS_TOKEN:
+        return
+    supplied = request.headers.get("x-admin-token") or ""
+    # 常量时间比较，避免按响应时间逐字节猜测令牌
+    if not hmac.compare_digest(supplied.encode("utf-8"), ACCESS_TOKEN.encode("utf-8")):
         raise HTTPException(401, "需要管理员令牌（X-Admin-Token）")
 
 
@@ -74,7 +82,7 @@ def index_page():
 @app.get("/api/stats")
 def stats(request: Request):
     _require_token(request)
-    return _get_engine_ready(DEFAULT_DB)
+    return _get_engine_ready(DB_PATH)
 
 
 @app.post("/api/check")
@@ -109,9 +117,7 @@ async def submit(request: Request, file: UploadFile = File(...), use_semantic: b
             with tempfile.NamedTemporaryFile(suffix=Path(file.filename).suffix, delete=False) as tf:
                 tf.write(raw)
                 tmp = Path(tf.name)
-            summary = run_check(
-                DEFAULT_DB, DEFAULT_REPORTS, tmp, use_semantic=use_semantic, verbose=False
-            )
+            summary = run_check(DB_PATH, REPORTS_DIR, tmp, use_semantic=use_semantic, verbose=False)
             _tasks[task_id].update(
                 status="done",
                 stage="完成",
@@ -190,6 +196,20 @@ const drop=document.getElementById('drop'),f=document.getElementById('f'),
 go=document.getElementById('go'),bar=document.getElementById('bar'),
 fill=document.getElementById('fill'),msg=document.getElementById('msg'),a=document.getElementById('a');
 let file=null;
+// 服务端设置了 PAPER_CHECK_TOKEN 时，所有 /api 请求需带 X-Admin-Token；
+// 令牌只存在本标签页的 sessionStorage，401 时提示输入后重试一次。
+function getTok(){try{return sessionStorage.getItem('pc_token')||''}catch(e){return ''}}
+function setTok(v){try{if(v)sessionStorage.setItem('pc_token',v);else sessionStorage.removeItem('pc_token')}catch(e){}}
+async function api(url,opts,retried){
+  opts=Object.assign({},opts||{});const h=new Headers(opts.headers||{});
+  const tk=getTok();if(tk)h.set('X-Admin-Token',tk);opts.headers=h;
+  const r=await fetch(url,opts);
+  if(r.status===401&&!retried){
+    const v=window.prompt('该服务需要管理员令牌（X-Admin-Token）：','');
+    if(v){setTok(v.trim());return api(url,opts,true)}
+  }
+  return r;
+}
 drop.onclick=()=>f.click();
 drop.ondragover=e=>{e.preventDefault();drop.classList.add('over')};
 drop.ondragleave=()=>drop.classList.remove('over');
@@ -200,14 +220,21 @@ go.onclick=async()=>{
   go.disabled=true;
   const fd=new FormData();fd.append('file',file);fd.append('use_semantic',document.getElementById('sem').checked);
   msg.textContent='上传中…';
-  const r=await fetch('/api/check',{method:'POST',body:fd});const j=await r.json();
+  const r=await api('/api/check',{method:'POST',body:fd});const j=await r.json();
   if(!r.ok){msg.textContent=j.detail||'提交失败';go.disabled=false;return}
   bar.style.display='block';msg.textContent='排队中…';
   const t=setInterval(async()=>{
-    const s=await (await fetch('/api/task/'+j.task_id)).json();
+    const s=await (await api('/api/task/'+j.task_id)).json();
     fill.style.width=s.pct+'%';msg.textContent=s.stage+'：'+s.message;
     if(s.status==='done'){clearInterval(t);msg.textContent='完成！总相似比 '+(s.total_ratio*100).toFixed(1)+'%，单篇最大来源 '+(s.single_max*100).toFixed(1)+'%'+(s.cached?'（秒传）':'');
-      a.style.display='block';a.querySelector('a').href='/api/report/'+j.task_id;go.disabled=false}
+      a.style.display='block';const link=a.querySelector('a');link.href='#';
+      // 报告接口同样需要令牌：普通链接无法带请求头，改为 fetch 后以 Blob URL 打开
+      link.onclick=async ev=>{ev.preventDefault();const w=window.open('','_blank');
+        const rr=await api('/api/report/'+j.task_id);
+        if(!rr.ok){if(w)w.close();msg.textContent='报告获取失败（HTTP '+rr.status+'）';return}
+        const u=URL.createObjectURL(new Blob([await rr.text()],{type:'text/html'}));
+        if(w)w.location.href=u;else window.location.href=u};
+      go.disabled=false}
     if(s.status==='error'){clearInterval(t);msg.textContent='失败：'+s.message;go.disabled=false}
   },800);
 };

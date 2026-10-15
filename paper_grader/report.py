@@ -72,7 +72,8 @@ def report_markdown(res: GradeResult, model_note: str = "") -> str:
 
 def save_report(res: GradeResult, out_dir: Path, model_note: str = "") -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
-    stem = Path(res.file).stem
+    # 优先用相对路径派生的唯一键，避免不同子目录下同名论文的报告互相覆盖
+    stem = res.key or Path(res.file).stem
     path = out_dir / f"批改报告__{stem}.md"
     path.write_text(report_markdown(res, model_note), encoding="utf-8")
     return path
