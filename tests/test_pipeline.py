@@ -15,6 +15,7 @@ from paper_grader.llm import LLMError, parse_json_loose
 from paper_grader.rubric import load_rubric
 
 PASS = 0
+ROOT = Path(__file__).resolve().parent.parent  # 按测试文件定位样例，不依赖启动目录
 
 
 def check(name, cond, detail=""):
@@ -61,7 +62,7 @@ def test_json_parsing():
 def test_short_paper():
     print("[2] 短文直评路径（course 量规）")
     cfg = AppConfig.load()
-    paper = extract_paper(Path("samples/研究生课程论文_大语言模型在教育教学中的应用研究.docx"))
+    paper = extract_paper(ROOT / "samples/研究生课程论文_大语言模型在教育教学中的应用研究.docx")
     dim_replies = [
         {
             "score": 90,
@@ -168,7 +169,7 @@ def test_cli_cache_sig():
     print("[5] 缓存签名校验")
     from paper_grader.cli import _cache_valid
 
-    p = Path("config.yaml")
+    p = ROOT / "config.yaml"
     cached = {
         "model": "glm-4.6",
         "mock": False,

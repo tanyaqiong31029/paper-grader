@@ -40,6 +40,23 @@ def _heat_color(ratio: float) -> str:
     return "#2ecc71"
 
 
+def script_safe_json(obj) -> str:
+    """序列化为可直接嵌入 <script> 的 JSON：转义 < > & 与行分隔符。
+
+    论文/来源文本中的 "</script>"、"<!--" 等若原样写入内联脚本会提前闭合
+    script 标签并注入任意 HTML（存储型 XSS）。JSON 结构字符不含 < > &，
+    这些字符只会出现在字符串内部，替换成 \\uXXXX 后 JS 解析结果不变。
+    """
+    return (
+        json.dumps(obj, ensure_ascii=False)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+        .replace("\u2028", "\\u2028")
+        .replace("\u2029", "\\u2029")
+    )
+
+
 def render_summary(res: CheckResult, report_no: str, params: dict) -> dict:
     return {
         "report_no": report_no,
@@ -112,7 +129,7 @@ def render_html(res: CheckResult, report_no: str, summary: dict) -> str:
         else:
             body_parts.append(f"<span>{esc(s.display)}</span>")
     body_html = " ".join(body_parts)
-    sentences_json = json.dumps(sent_json, ensure_ascii=False)
+    sentences_json = script_safe_json(sent_json)
 
     # ---------- 来源分布 ----------
     max_ratio = max((s.ratio for s in res.sources), default=0.0)
@@ -209,15 +226,18 @@ th{{background:#34495e;color:#fff}} .num{{text-align:right;font-variant-numeric:
 
 <script>
 const S = {sentences_json};
+const TIER_LABEL = {{copy:'复制',near:'高度疑似',suspect:'疑似',semantic:'改写疑似'}};
+function escHtml(v) {{
+  return String(v == null ? '' : v).replace(/[&<>"']/g, ch => ({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}})[ch]);
+}}
 function showMatch(i) {{
   const s = S.find(x => x.idx === i); if (!s) return;
   document.querySelectorAll('.hit').forEach(e => e.style.outline = '');
   const el = document.getElementById('q' + i); if (el) el.style.outline = '2px solid #2c3e50';
   const c = {{copy:'#c0392b',near:'#e67e22',suspect:'#f1c40f',semantic:'#2e86de'}}[s.tier] || '#888';
-  let h = `<div class="em"><div class="src">送检句（${{s.chapter}}）· 分级 <b style="color:${{c}}">${{{{copy:'复制',near:'高度疑似',suspect:'疑似',semantic:'改写疑似'}}[s.tier]}}}}</b> · 相似度 ${{s.sim.toFixed(2)}}${{s.cos ? ' · 语义余弦 ' + s.cos.toFixed(2) : ''}}</div><div>${{s.text}}</div></div>`;
+  let h = `<div class="em"><div class="src">送检句（${{escHtml(s.chapter)}}）· 分级 <b style="color:${{c}}">${{escHtml(TIER_LABEL[s.tier])}}</b> · 相似度 ${{Number(s.sim).toFixed(2)}}${{s.cos ? ' · 语义余弦 ' + Number(s.cos).toFixed(2) : ''}}</div><div>${{escHtml(s.text)}}</div></div>`;
   for (const m of s.matches) {{
-    h += `<div class="em"><div class="src">来源：${{m.doc}} · ${{{{
-      copy:'复制',near:'高度疑似',suspect:'疑似',semantic:'改写疑似'}}[m.tier]}} · 相似度 ${{m.sim.toFixed(2)}}</div><div>${{m.text}}</div></div>`;
+    h += `<div class="em"><div class="src">来源：${{escHtml(m.doc)}} · ${{escHtml(TIER_LABEL[m.tier])}} · 相似度 ${{Number(m.sim).toFixed(2)}}</div><div>${{escHtml(m.text)}}</div></div>`;
   }}
   document.getElementById('evi-body').innerHTML = h;
 }}

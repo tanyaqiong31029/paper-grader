@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 import time
@@ -25,11 +26,11 @@ from pathlib import Path
 
 from . import __version__
 from .config import AppConfig
-from .extract import collect_papers, extract_paper
+from .extract import collect_papers, extract_paper, paper_key
 from .grader import DimensionResult, Grader, GradeResult
-from .llm import LLMClient
+from .llm import LLMClient, is_local_endpoint
 from .report import save_failures_csv, save_report, save_summary_xlsx
-from .rubric import load_rubric
+from .rubric import Rubric, load_rubric
 
 
 def build_argparser() -> argparse.ArgumentParser:
@@ -62,8 +63,22 @@ def build_argparser() -> argparse.ArgumentParser:
     return ap
 
 
-def _cache_path(out_dir: Path, stem: str) -> Path:
-    return out_dir / "cache" / f"{stem}.json"
+def _cache_path(out_dir: Path, key: str) -> Path:
+    return out_dir / "cache" / f"{key}.json"
+
+
+def rubric_hash(rubric: Rubric) -> str:
+    """量规内容哈希：config.yaml 中量规（维度/权重/要点）改动后缓存自动失效。"""
+    payload = json.dumps(
+        {
+            "ptype": rubric.ptype,
+            "name": rubric.name,
+            "dimensions": [[d.name, d.weight, d.criteria] for d in rubric.dimensions],
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
 def _result_from_dict(d: dict) -> GradeResult:
@@ -72,11 +87,26 @@ def _result_from_dict(d: dict) -> GradeResult:
     return GradeResult(**d)
 
 
-def _cache_valid(cached: dict, path: Path, model: str, mock: bool) -> bool:
+def _cache_valid(
+    cached: dict,
+    path: Path,
+    model: str,
+    mock: bool,
+    *,
+    ptype: str | None = None,
+    rubric_sig: str | None = None,
+    redact_pii: bool = False,
+) -> bool:
+    """缓存命中条件：源文件、模型、mock、论文类型、量规内容、脱敏开关均一致，且上次未出错。"""
     sig = cached.get("source_sig", {})
+    result = cached.get("result") or {}
     return (
-        cached.get("model") == model
+        not result.get("error")  # 失败结果只用于排查，不能当作命中（否则永远不会重试）
+        and cached.get("model") == model
         and cached.get("mock") == mock
+        and cached.get("ptype") == ptype
+        and cached.get("rubric_sig") == rubric_sig
+        and bool(cached.get("redact_pii", False)) == bool(redact_pii)
         and sig.get("size") == path.stat().st_size
         and sig.get("mtime") == int(path.stat().st_mtime)
     )
@@ -88,7 +118,8 @@ def grade_files(args) -> int:
     cache_dir = out_dir / "cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
 
-    files = collect_papers(args.path)
+    # 排除实际的输出目录（--out 可能位于输入目录内部），避免把上次的报告当论文
+    files = collect_papers(args.path, exclude=out_dir)
     if not files:
         print(f"在 {args.path} 中未找到论文文件（支持 .pdf .docx .txt .md）")
         return 1
@@ -108,7 +139,7 @@ def grade_files(args) -> int:
     # 默认 config.yaml 指向外部模型服务（如智谱）。未明确确认前拒绝发送，
     # 避免首次使用者不了解数据流就上传学生论文。
     base = cfg.llm.base_url
-    is_local = "localhost" in base or "127.0.0.1" in base
+    is_local = is_local_endpoint(base)
     if not args.mock:
         if args.local_only and not is_local:
             print(f"[错误] --local-only 与当前配置冲突：base_url={base} 不是本地端点。")
@@ -133,16 +164,36 @@ def grade_files(args) -> int:
 
     results: list[GradeResult] = []
     pending: list[tuple[Path, str]] = []
+    keys: dict[Path, str] = {f: paper_key(f, args.path) for f in files}
+    rubric_sigs: dict[str, str | None] = {}
+
+    def rubric_sig_of(ptype: str) -> str | None:
+        if ptype not in rubric_sigs:
+            try:
+                rubric_sigs[ptype] = rubric_hash(load_rubric(cfg, ptype))
+            except ValueError:
+                rubric_sigs[ptype] = None  # 量规缺失：work() 中会记为失败
+        return rubric_sigs[ptype]
+
     t0 = time.time()
 
     for f in files:
         ptype = cfg.detect_paper_type(f.name) if args.type == "auto" else args.type
-        cp = _cache_path(out_dir, f.stem)
+        cp = _cache_path(out_dir, keys[f])
         if not args.force and cp.exists():
             try:
                 cached = json.loads(cp.read_text(encoding="utf-8"))
-                if _cache_valid(cached, f, cfg.llm.model, args.mock):
+                if _cache_valid(
+                    cached,
+                    f,
+                    cfg.llm.model,
+                    args.mock,
+                    ptype=ptype,
+                    rubric_sig=rubric_sig_of(ptype),
+                    redact_pii=args.redact_pii,
+                ):
                     res = _result_from_dict(cached["result"])
+                    res.key = keys[f]
                     results.append(res)
                     print(f"  [缓存] {f.name} → {res.total}（{res.band}）")
                     continue
@@ -169,6 +220,7 @@ def grade_files(args) -> int:
                 dimensions=[],
                 error=f"{type(e).__name__}: {e}"[:300],
             )
+        res.key = keys[path]
         return res
 
     if pending:
@@ -186,14 +238,17 @@ def grade_files(args) -> int:
                         f"（{res.band}，置信度 {res.confidence:.2f}）"
                     )
                 # 写缓存（失败的也记下来，便于排查；--force 可重试）
-                cp = _cache_path(out_dir, Path(res.file).stem)
-                src = Path(futs[fut][0])
+                src, src_ptype = futs[fut]
+                cp = _cache_path(out_dir, keys[src])
                 cp.write_text(
                     json.dumps(
                         {
                             "result": res.to_dict(),
                             "model": cfg.llm.model,
                             "mock": args.mock,
+                            "ptype": src_ptype,
+                            "rubric_sig": rubric_sig_of(src_ptype),
+                            "redact_pii": bool(args.redact_pii),
                             "source_sig": {
                                 "size": src.stat().st_size,
                                 "mtime": int(src.stat().st_mtime),

@@ -37,7 +37,8 @@ class LLMConfig:
         return cls(
             base_url=d.get("base_url", cls.base_url),
             model=d.get("model", cls.model),
-            api_key=d.get("api_key") or env_key,
+            # 与 README / config.yaml 说明一致：环境变量优先，config 中的 api_key 仅作兜底
+            api_key=env_key or d.get("api_key") or "",
             temperature=float(d.get("temperature", cls.temperature)),
             max_tokens=int(d.get("max_tokens", cls.max_tokens)),
             timeout=int(d.get("timeout", cls.timeout)),

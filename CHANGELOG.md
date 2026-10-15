@@ -4,6 +4,18 @@
 
 ## [Unreleased] - 2026-09-06
 
+### 修复
+- 查重报告：内嵌 JSON 转义 `<`/`>`/`&`，证据面板对原文/来源名/章节做 HTML 转义（存储型 XSS）
+- 本地模型（Ollama 等）无需 API Key、不发送 Authorization；本地端点按 URL hostname 精确判定
+- `--mock` 短文 UnboundLocalError；维度分数容忍 "78分" 等带单位写法
+- PII：身份证号先于手机号匹配，数字边界改用前后断言（"身份证号110…"可完整脱敏）
+- 论文收集排除实际 `--out` 目录，"output" 仅按相对输入目录判断
+- 缓存/报告文件名按相对路径唯一键，防止不同子目录同名论文互相覆盖；失败结果不再命中缓存，
+  缓存签名纳入论文类型、量规内容哈希与脱敏开关
+- paper_check：顶层 `--db/--reports` 不再被子命令默认值覆盖，`serve` 参数真正传入服务；
+  上传页携带 X-Admin-Token；令牌比较改为 `hmac.compare_digest`
+- API Key 优先级与文档一致：环境变量优先于 config.yaml
+
 ### 安全
 - 补充 MIT LICENSE（含 samples/corpus 第三方内容许可说明）
 - 外部 LLM 数据流同意机制：`--local-only` / `--confirm-remote` / 交互确认

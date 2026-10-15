@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -22,6 +23,9 @@ from .store import LibraryStore, sha256_of
 
 DEFAULT_DB = Path("output/check/library.db")
 DEFAULT_REPORTS = Path("output/check/reports")
+# serve 子命令通过环境变量把 --db/--reports 传给 service.py（uvicorn 按模块路径加载 app）
+ENV_DB = "PAPER_CHECK_DB"
+ENV_REPORTS = "PAPER_CHECK_REPORTS"
 
 
 def build_params_key(use_semantic: bool, store: LibraryStore) -> str:
@@ -138,18 +142,27 @@ def cmd_check(args) -> int:
 def cmd_serve(args) -> int:
     import uvicorn
 
+    os.environ[ENV_DB] = str(args.db)
+    os.environ[ENV_REPORTS] = str(args.reports)
     uvicorn.run("paper_check.service:app", host=args.host, port=args.port)
     return 0
 
 
-def main(argv=None) -> int:
+def build_argparser() -> argparse.ArgumentParser:
+    # --db/--reports 既可写在子命令前（顶层），也可写在子命令后。子解析器的默认值
+    # 若为真实路径，会在解析子命令时覆盖顶层已解析的值；因此子解析器一侧用
+    # SUPPRESS（未显式给出就不写入 namespace），真实默认值只放在顶层。
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--db", default=str(DEFAULT_DB), help="比对库 SQLite 路径")
-    common.add_argument("--reports", default=str(DEFAULT_REPORTS), help="报告输出目录")
-
-    ap = argparse.ArgumentParser(
-        prog="paper_check", description="论文查重（本地三级漏斗引擎）", parents=[common]
+    common.add_argument(
+        "--db", default=argparse.SUPPRESS, help=f"比对库 SQLite 路径（默认 {DEFAULT_DB}）"
     )
+    common.add_argument(
+        "--reports", default=argparse.SUPPRESS, help=f"报告输出目录（默认 {DEFAULT_REPORTS}）"
+    )
+
+    ap = argparse.ArgumentParser(prog="paper_check", description="论文查重（本地三级漏斗引擎）")
+    ap.add_argument("--db", default=str(DEFAULT_DB), help="比对库 SQLite 路径")
+    ap.add_argument("--reports", default=str(DEFAULT_REPORTS), help="报告输出目录")
     sub = ap.add_subparsers(dest="command", required=True)
 
     p1 = sub.add_parser("index", help="建设比对库", parents=[common])
@@ -165,8 +178,11 @@ def main(argv=None) -> int:
     p3.add_argument("--host", default="127.0.0.1")
     p3.add_argument("--port", type=int, default=8018)
     p3.set_defaults(func=cmd_serve)
+    return ap
 
-    args = ap.parse_args(argv)
+
+def main(argv=None) -> int:
+    args = build_argparser().parse_args(argv)
     return args.func(args)
 
 
